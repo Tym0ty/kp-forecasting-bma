@@ -7,9 +7,14 @@
 
     <!-- File input for CSV upload -->
     <div class="file-upload">
-      <input type="file" class="file-input" @change="handleFileUpload" accept=".csv" />
+      <input type="file" id="csv-upload" class="file-input" @change="handleFileUpload" accept=".csv" />
+      <label for="csv-upload" class="file-input-label">
+        <span>Choose CSV File</span>
+        <span v-if="selectedFile" class="file-name">{{ selectedFile.name }}</span>
+        <span v-else class="file-name">No file chosen</span>
+      </label>
       <div class="target-inputs">
-        <input type="text" v-model="targetProductId" placeholder="Enter Target Product ID (e.g., MP000294_KD000016_PL000037_SZ000012)" class="product-input" />
+        <input type="text" v-model="targetProductId" placeholder="Enter Target Product ID" class="product-input" />
         <div class="target-details" v-if="parsedTarget">
           <p>KODE_BARANG: {{ parsedTarget.kodeBarang }}</p>
           <p>KLASIFIKASI_BARANG: {{ parsedTarget.klasifikasiBarang }}</p>
@@ -356,77 +361,160 @@ export default {
 </script>
 
 <style scoped>
-/* Body and general layout */
-body {
-  font-family: 'Roboto', sans-serif;
-  background-color: #f9fafb;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
+.container {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
-.container {
-  width: 80%;
-  max-width: 900px;
-  padding: 30px;
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+.header {
   text-align: center;
+  margin-bottom: 2rem;
 }
 
 .header h1 {
   font-size: 2.5rem;
   color: #333;
-  margin-bottom: 10px;
+  margin-bottom: 0.5rem;
 }
 
 .header p {
-  color: #555;
+  color: #666;
   font-size: 1.1rem;
-  margin-bottom: 30px;
+  margin: 0;
 }
 
 .file-upload {
-  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .file-input {
-  font-size: 1.1rem;
-  padding: 10px;
-  color: #fff;
-  background-color: #4CAF50;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-  width: 100%;
-  max-width: 400px;
-  margin: 0 auto;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  z-index: -1;
 }
 
-.file-input:hover {
+.file-input-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  width: 100%;
+  max-width: 400px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #fff;
+  background-color: #4CAF50;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.file-input-label:hover {
   background-color: #45a049;
 }
 
-/* Result Section */
+.file-name {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-inputs {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.product-input,
+.forecast-period-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: white;
+  transition: border-color 0.2s;
+}
+
+.product-input:focus,
+.forecast-period-select:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
+
+.target-details {
+  padding: 1rem;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.target-details p {
+  margin: 0.5rem 0;
+  color: #333;
+}
+
+.upload-button {
+  display: inline-block;
+  width: 100%;
+  max-width: 400px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #fff;
+  background-color: #4CAF50;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.upload-button:hover:not(:disabled) {
+  background-color: #45a049;
+}
+
+.upload-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
 .result {
   margin-top: 40px;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
 }
 
 .data-table {
   width: 100%;
-  margin-top: 20px;
+  margin: 20px auto;
   border-collapse: collapse;
   border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .data-table th, .data-table td {
-  padding: 12px;
+  padding: 15px;
   text-align: center;
   border-bottom: 1px solid #ddd;
   color: #333;
@@ -446,115 +534,35 @@ body {
   background-color: #f1f1f1;
 }
 
-canvas {
-  width: 100% !important;
-  max-width: 800px;
-  margin: 0 auto;
-  margin-top: 20px;
-}
-
-.target-inputs {
-  margin: 20px 0;
-}
-
-.target-details {
-  margin: 10px 0;
-  padding: 10px;
-  background-color: #f5f5f5;
-  border-radius: 5px;
-}
-
-.target-details p {
-  margin: 5px 0;
-  color: #333;
-}
-
-.product-input {
-  font-size: 1.1rem;
-  padding: 10px;
-  margin: 10px 0;
-  width: 100%;
-  max-width: 400px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-}
-
-.upload-button {
-  font-size: 1.1rem;
-  padding: 10px 20px;
-  color: #fff;
-  background-color: #4CAF50;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-  width: 100%;
-  max-width: 400px;
-  margin: 10px auto;
-}
-
-.upload-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-.loading {
-  margin: 20px 0;
-  text-align: center;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  margin: 20px auto;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #4CAF50;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.error {
-  color: #ff0000;
-  margin: 20px 0;
-  padding: 10px;
-  background-color: #ffebee;
-  border-radius: 5px;
-}
-
 .pagination-controls {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding: 10px;
+  margin: 20px 0;
+  padding: 15px;
   background-color: #f5f5f5;
-  border-radius: 5px;
+  border-radius: 8px;
 }
 
 .page-size-select {
-  padding: 8px;
+  padding: 10px;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 6px;
   background-color: white;
 }
 
 .pagination-buttons {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 15px;
 }
 
 .pagination-button {
-  padding: 8px 16px;
+  padding: 10px 20px;
   background-color: #4CAF50;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.3s;
 }
@@ -570,17 +578,45 @@ canvas {
 
 .page-info {
   color: #333;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
-.forecast-period-select {
-  font-size: 1.1rem;
-  padding: 10px;
-  margin: 10px 0;
-  width: 100%;
-  max-width: 400px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
+.loading {
+  margin: 30px 0;
+  text-align: center;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  margin: 20px auto;
+  border: 5px solid #f3f3f3;
+  border-top: 5px solid #4CAF50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.error {
+  color: #ff0000;
+  margin: 20px 0;
+  padding: 15px;
+  background-color: #ffebee;
+  border-radius: 8px;
+  text-align: center;
+}
+
+canvas {
+  width: 100% !important;
+  max-width: 1000px;
+  margin: 30px auto;
   background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>
