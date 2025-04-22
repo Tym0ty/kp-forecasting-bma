@@ -130,6 +130,10 @@ export default {
       forecastPeriod: 'month' // Default to 1 month
     };
   },
+  mounted() {
+    // Load cached data when component mounts
+    this.loadCachedData();
+  },
   computed: {
     isValidTarget() {
       return this.parsedTarget !== null;
@@ -146,9 +150,102 @@ export default {
   watch: {
     targetProductId(newValue) {
       this.parseTargetProductId(newValue);
+    },
+    forecastPeriod() {
+      // Reprocess data with new period if we have data
+      if (this.forecastData.length > 0) {
+        this.processForecastData(this.forecastData);
+        // Update cache with new period
+        this.saveCacheData(this.forecastData);
+      }
     }
   },
   methods: {
+    loadCachedData() {
+      try {
+        const cachedData = localStorage.getItem('forecastCache');
+        if (cachedData) {
+          const { forecastData, targetProductId, forecastPeriod } = JSON.parse(cachedData);
+          this.targetProductId = targetProductId;
+          this.forecastPeriod = forecastPeriod;
+          this.parseTargetProductId(targetProductId);
+          
+          // Process the cached data
+          this.processForecastData(forecastData);
+        }
+      } catch (error) {
+        console.error('Error loading cached data:', error);
+      }
+    },
+
+    saveCacheData(data) {
+      try {
+        const cacheData = {
+          forecastData: data,
+          targetProductId: this.targetProductId,
+          forecastPeriod: this.forecastPeriod
+        };
+        localStorage.setItem('forecastCache', JSON.stringify(cacheData));
+      } catch (error) {
+        console.error('Error saving cache:', error);
+      }
+    },
+
+    processForecastData(data) {
+      // Filter data based on forecast period
+      let filteredData = data;
+      if (this.forecastPeriod === 'week') {
+        filteredData = data.slice(0, 7); // First 7 days
+      } else if (this.forecastPeriod === 'month') {
+        filteredData = data.slice(0, 30); // First 30 days
+      }
+
+      // Keep daily data for the table
+      this.forecastData = filteredData;
+
+      // Process data for the graph based on forecast period
+      if (this.forecastPeriod === 'year') {
+        // Aggregate data by month for yearly view
+        const monthlyData = {};
+        data.forEach(item => {
+          const date = new Date(item.TANGGAL);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = {
+              total: 0,
+              count: 0
+            };
+          }
+          
+          monthlyData[monthKey].total += parseFloat(item.TOTAL_JUMLAH);
+          monthlyData[monthKey].count += 1;
+        });
+
+        const monthlyArray = Object.entries(monthlyData).map(([date, data]) => ({
+          TANGGAL: date,
+          TOTAL_JUMLAH: (data.total / data.count).toFixed(2)
+        })).sort((a, b) => a.TANGGAL.localeCompare(b.TANGGAL));
+
+        this.chartData = monthlyArray.map(item => parseFloat(item.TOTAL_JUMLAH));
+        this.chartLabels = monthlyArray.map(item => {
+          const [year, month] = item.TANGGAL.split('-');
+          return new Date(year, month - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+        });
+      } else {
+        // Use daily data for weekly and monthly views
+        this.chartData = filteredData.map(item => parseFloat(item.TOTAL_JUMLAH));
+        this.chartLabels = filteredData.map(item => {
+          const date = new Date(item.TANGGAL);
+          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+      }
+
+      nextTick(() => {
+        this.renderChart();
+      });
+    },
+
     parseTargetProductId(id) {
       if (!id) {
         this.parsedTarget = null;
@@ -248,59 +345,11 @@ export default {
             return obj;
           });
 
-          // Filter data based on forecast period
-          let filteredData = data;
-          if (this.forecastPeriod === 'week') {
-            filteredData = data.slice(0, 7); // First 7 days
-          } else if (this.forecastPeriod === 'month') {
-            filteredData = data.slice(0, 30); // First 30 days
-          }
-
-          // Keep daily data for the table
-          this.forecastData = filteredData;
-
-          // Process data for the graph based on forecast period
-          if (this.forecastPeriod === 'year') {
-            // Aggregate data by month for yearly view
-            const monthlyData = {};
-            data.forEach(item => {
-              const date = new Date(item.TANGGAL);
-              const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-              
-              if (!monthlyData[monthKey]) {
-                monthlyData[monthKey] = {
-                  total: 0,
-                  count: 0
-                };
-              }
-              
-              monthlyData[monthKey].total += parseFloat(item.TOTAL_JUMLAH);
-              monthlyData[monthKey].count += 1;
-            });
-
-            const monthlyArray = Object.entries(monthlyData).map(([date, data]) => ({
-              TANGGAL: date,
-              TOTAL_JUMLAH: (data.total / data.count).toFixed(2)
-            })).sort((a, b) => a.TANGGAL.localeCompare(b.TANGGAL));
-
-            this.chartData = monthlyArray.map(item => parseFloat(item.TOTAL_JUMLAH));
-            this.chartLabels = monthlyArray.map(item => {
-              const [year, month] = item.TANGGAL.split('-');
-              return new Date(year, month - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
-            });
-          } else {
-            // Use daily data for weekly and monthly views
-            this.chartData = filteredData.map(item => parseFloat(item.TOTAL_JUMLAH));
-            this.chartLabels = filteredData.map(item => {
-              const date = new Date(item.TANGGAL);
-              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            });
-          }
-
-          nextTick(() => {
-            this.renderChart();
-          });
-
+          // Save to cache before processing
+          this.saveCacheData(data);
+          
+          // Process the data
+          this.processForecastData(data);
           this.isProcessing = false;
         };
 
