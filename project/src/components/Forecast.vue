@@ -8,9 +8,32 @@
     <!-- File input for CSV upload -->
     <div class="file-upload">
       <input type="file" class="file-input" @change="handleFileUpload" accept=".csv" />
+      <div class="target-inputs">
+        <input type="text" v-model="targetProductId" placeholder="Enter Target Product ID (e.g., MP000294_KD000016_PL000037_SZ000012)" class="product-input" />
+        <div class="target-details" v-if="parsedTarget">
+          <p>KODE_BARANG: {{ parsedTarget.kodeBarang }}</p>
+          <p>KLASIFIKASI_BARANG: {{ parsedTarget.klasifikasiBarang }}</p>
+          <p>WARNA_BARANG: {{ parsedTarget.warnaBarang }}</p>
+          <p>UKURAN_BARANG: {{ parsedTarget.ukuranBarang }}</p>
+        </div>
+      </div>
+      <button @click="uploadCSV" :disabled="!selectedFile || !isValidTarget" class="upload-button">
+        Upload and Process
+      </button>
     </div>
 
-    <!-- Forecast Graph - this will be shown right after CSV is uploaded -->
+    <!-- Loading State -->
+    <div v-if="isProcessing" class="loading">
+      <p>Processing your file... Please wait.</p>
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Error Message -->
+    <div v-if="error" class="error">
+      {{ error }}
+    </div>
+
+    <!-- Forecast Graph -->
     <div v-if="chartData.length" class="result">
       <h3>Forecast Graph</h3>
       <canvas id="forecastChart" width="400" height="200"></canvas>
@@ -28,7 +51,7 @@
         </thead>
         <tbody>
           <tr v-for="(data, index) in forecastData" :key="index">
-            <td>{{ data.DATE }}</td>
+            <td>{{ data.TANGGAL }}</td>
             <td>{{ data.BERAT_TOTAL }}</td>
           </tr>
         </tbody>
@@ -38,72 +61,178 @@
 </template>
 
 <script>
-// Import Vue's nextTick to ensure DOM updates are complete before rendering the chart
 import { nextTick } from 'vue';
-import { Chart } from 'chart.js';
+import {
+  Chart,
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import { uploadCSV, checkTaskStatus, downloadFile } from '../services/api';
+
+// Register necessary components with Chart.js
+Chart.register(
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Title,
+  Tooltip,
+  Legend
+);
 
 export default {
   name: 'TimeSeriesForecast',
   data() {
     return {
-      forecastData: [],  // Forecast data to populate the table and chart
-      chartData: [],      // Chart data points
-      chartLabels: []     // Chart labels (dates)
+      selectedFile: null,
+      targetProductId: '',
+      forecastData: [],
+      chartData: [],
+      chartLabels: [],
+      chartInstance: null,
+      isProcessing: false,
+      error: null,
+      taskId: null,
+      statusCheckInterval: null,
+      parsedTarget: null
     };
   },
+  computed: {
+    isValidTarget() {
+      return this.parsedTarget !== null;
+    }
+  },
+  watch: {
+    targetProductId(newValue) {
+      this.parseTargetProductId(newValue);
+    }
+  },
   methods: {
-    // Handle file upload (mocking the backend response)
-    handleFileUpload() {
-      // Simulating the backend response
-      this.uploadCSV();
+    parseTargetProductId(id) {
+      if (!id) {
+        this.parsedTarget = null;
+        return;
+      }
+
+      const parts = id.split('_');
+      if (parts.length !== 4) {
+        this.parsedTarget = null;
+        return;
+      }
+
+      this.parsedTarget = {
+        kodeBarang: parts[0],
+        klasifikasiBarang: parts[1],
+        warnaBarang: parts[2],
+        ukuranBarang: parts[3]
+      };
     },
 
-    // Mock the backend CSV processing and response
-    uploadCSV() {
-      // Mocked forecast data based on the format you provided
-      const mockData = [
-        { "BERAT_TOTAL": 681.0, "DATE": "2023-01-02" },
-        { "BERAT_TOTAL": 2742.0, "DATE": "2023-01-03" },
-        { "BERAT_TOTAL": 647.0, "DATE": "2023-01-04" },
-        { "BERAT_TOTAL": 123.0, "DATE": "2023-01-05" },
-        { "BERAT_TOTAL": 341.0, "DATE": "2023-01-06" },
-        { "BERAT_TOTAL": 535.0, "DATE": "2023-12-18" },
-        { "BERAT_TOTAL": 280.0, "DATE": "2023-12-19" },
-        { "BERAT_TOTAL": 8.0, "DATE": "2023-12-20" },
-        { "BERAT_TOTAL": 6.0, "DATE": "2023-12-26" },
-        { "BERAT_TOTAL": 7.0, "DATE": "2023-12-27" }
-      ];
-
-      // Simulating the backend response
-      this.forecastData = mockData;
-
-      // Prepare data for the chart
-      this.chartData = mockData.map(item => item.BERAT_TOTAL); // Extract BERAT_TOTAL for the chart
-      this.chartLabels = mockData.map(item => item.DATE);      // Extract DATE for the chart labels
-
-      // Use nextTick to wait for the DOM to update before rendering the chart
-      nextTick(() => {
-        this.renderChart();
-      });
+    handleFileUpload(event) {
+      this.selectedFile = event.target.files[0];
+      this.error = null;
     },
 
-    // Render the Chart.js chart
+    async uploadCSV() {
+      if (!this.selectedFile || !this.isValidTarget) {
+        this.error = 'Please select a file and enter a valid target product ID';
+        return;
+      }
+
+      this.isProcessing = true;
+      this.error = null;
+
+      try {
+        const response = await uploadCSV(this.selectedFile, this.targetProductId);
+        this.taskId = response.task_id;
+        this.startStatusCheck();
+      } catch (error) {
+        this.error = 'Error uploading file. Please try again.';
+        this.isProcessing = false;
+      }
+    },
+
+    startStatusCheck() {
+      this.statusCheckInterval = setInterval(this.checkStatus, 2000);
+    },
+
+    async checkStatus() {
+      if (!this.taskId) return;
+
+      try {
+        const status = await checkTaskStatus(this.taskId);
+        
+        if (status.status === 'Completed') {
+          clearInterval(this.statusCheckInterval);
+          await this.downloadAndProcessFile(status.output_file);
+        } else if (status.status === 'Failed') {
+          clearInterval(this.statusCheckInterval);
+          this.error = 'Processing failed: ' + status.message;
+          this.isProcessing = false;
+        }
+      } catch (error) {
+        clearInterval(this.statusCheckInterval);
+        this.error = 'Error checking status. Please try again.';
+        this.isProcessing = false;
+      }
+    },
+
+    async downloadAndProcessFile(filename) {
+      try {
+        const blob = await downloadFile(filename);
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+          const text = e.target.result;
+          const rows = text.split('\n').map(row => row.split(','));
+          const headers = rows[0];
+          const data = rows.slice(1).map(row => {
+            const obj = {};
+            headers.forEach((header, index) => {
+              obj[header] = row[index];
+            });
+            return obj;
+          });
+
+          this.forecastData = data;
+          this.chartData = data.map(item => parseFloat(item.BERAT_TOTAL));
+          this.chartLabels = data.map(item => item.TANGGAL);
+
+          nextTick(() => {
+            this.renderChart();
+          });
+
+          this.isProcessing = false;
+        };
+
+        reader.readAsText(blob);
+      } catch (error) {
+        this.error = 'Error processing downloaded file. Please try again.';
+        this.isProcessing = false;
+      }
+    },
+
     renderChart() {
       const ctx = document.getElementById('forecastChart').getContext('2d');
 
-      // If the chart already exists, destroy it and create a new one
       if (this.chartInstance) {
         this.chartInstance.destroy();
       }
 
-      // Create new chart instance
       this.chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: this.chartLabels,  // Labels (dates)
+          labels: this.chartLabels,
           datasets: [{
             label: 'BERAT_TOTAL',
-            data: this.chartData,     // Total weight values (BERAT_TOTAL)
+            data: this.chartData,
             borderColor: '#4CAF50',
             backgroundColor: 'rgba(76, 175, 80, 0.2)',
             fill: true,
@@ -114,6 +243,7 @@ export default {
           responsive: true,
           scales: {
             x: {
+              type: 'category',
               title: {
                 display: true,
                 text: 'Date'
@@ -128,6 +258,11 @@ export default {
           }
         }
       });
+    }
+  },
+  beforeUnmount() {
+    if (this.statusCheckInterval) {
+      clearInterval(this.statusCheckInterval);
     }
   }
 };
@@ -229,5 +364,78 @@ canvas {
   max-width: 800px;
   margin: 0 auto;
   margin-top: 20px;
+}
+
+.target-inputs {
+  margin: 20px 0;
+}
+
+.target-details {
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 5px;
+}
+
+.target-details p {
+  margin: 5px 0;
+  color: #333;
+}
+
+.product-input {
+  font-size: 1.1rem;
+  padding: 10px;
+  margin: 10px 0;
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.upload-button {
+  font-size: 1.1rem;
+  padding: 10px 20px;
+  color: #fff;
+  background-color: #4CAF50;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  width: 100%;
+  max-width: 400px;
+  margin: 10px auto;
+}
+
+.upload-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.loading {
+  margin: 20px 0;
+  text-align: center;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  margin: 20px auto;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #4CAF50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error {
+  color: #ff0000;
+  margin: 20px 0;
+  padding: 10px;
+  background-color: #ffebee;
+  border-radius: 5px;
 }
 </style>
