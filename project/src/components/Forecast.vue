@@ -128,7 +128,7 @@ export default {
       parsedTarget: null,
       currentPage: 1,
       itemsPerPage: 10,
-      forecastPeriod: 'month'
+      forecastPeriod: localStorage.getItem('lastForecastPeriod') || 'month'
     };
   },
   computed: {
@@ -153,19 +153,8 @@ export default {
     }
   },
   async mounted() {
-    // Try to load the most recent data from the output folder
-    try {
-      const response = await fetch('http://localhost:8000/latest-output/');
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.length > 0) {
-          this.originalData = data;
-          this.updateForecastView();
-        }
-      }
-    } catch (error) {
-      console.error('Error loading recent data:', error);
-    }
+    // Try to load data in this order: localStorage -> server -> empty state
+    await this.loadSavedData();
   },
   methods: {
     parseTargetProductId(id) {
@@ -250,6 +239,51 @@ export default {
       }
     },
 
+    async loadSavedData() {
+      // First try to load from localStorage
+      const cachedData = localStorage.getItem('forecastData');
+      const cachedTimestamp = localStorage.getItem('forecastDataTimestamp');
+      const cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+      if (cachedData && cachedTimestamp) {
+        const timestamp = parseInt(cachedTimestamp);
+        if (Date.now() - timestamp < cacheExpiry) {
+          try {
+            this.originalData = JSON.parse(cachedData);
+            this.updateForecastView();
+            return;
+          } catch (e) {
+            console.error('Error parsing cached data:', e);
+          }
+        }
+      }
+
+      // If cache is missing or expired, try to load from server
+      try {
+        const response = await fetch('http://localhost:8000/latest-output/');
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.length > 0) {
+            this.originalData = data;
+            this.updateForecastView();
+            // Update cache
+            this.updateCache(data);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading recent data:', error);
+      }
+    },
+
+    updateCache(data) {
+      try {
+        localStorage.setItem('forecastData', JSON.stringify(data));
+        localStorage.setItem('forecastDataTimestamp', Date.now().toString());
+      } catch (e) {
+        console.error('Error caching data:', e);
+      }
+    },
+
     async downloadAndProcessFile(filename) {
       try {
         const blob = await downloadFile(filename);
@@ -268,6 +302,7 @@ export default {
           });
 
           this.originalData = data;
+          this.updateCache(data); // Cache the new data
           this.updateForecastView();
           this.isProcessing = false;
         };
@@ -281,6 +316,9 @@ export default {
 
     updateForecastView() {
       if (!this.originalData.length) return;
+
+      // Save last used period
+      localStorage.setItem('lastForecastPeriod', this.forecastPeriod);
 
       // Update table data based on period
       if (this.forecastPeriod === 'week') {
