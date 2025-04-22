@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, Form, File
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from celery import Celery
 import pandas as pd
 import os
@@ -32,7 +33,13 @@ app = FastAPI(
 )
 
 app.add_middleware(LimitUploadSizeMiddleware, max_upload_size=50 * 1024 * 1024)  # 50 MB
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins. Replace with specific origins for better security.
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 redis_host = os.getenv('REDIS_HOST', 'localhost')
 
 # Configure Celery
