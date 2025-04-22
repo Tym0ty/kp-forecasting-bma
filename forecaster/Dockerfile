@@ -19,13 +19,16 @@ ENV PATH="/root/.local/bin:$PATH"
 # Set the working directory
 WORKDIR /app
 
+# Add the application directory to the Python path
+ENV PYTHONPATH=/app
+
 # Copy project files
 COPY pyproject.toml poetry.lock /app/
 
-RUN poetry install --no-root 
-
 # Copy the application code
 COPY . /app/
+
+RUN poetry install --no-root 
 
 # Copy Supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
