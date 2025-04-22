@@ -1,34 +1,31 @@
-FROM python:3.10-slim
+FROM python:3.10-slim-buster
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+ENV PATH="/root/.local/bin:$PATH"
+ENV PYTHONPATH=/app
 
-# Install system dependencies
+# Set the working directory
+WORKDIR /app
+
+# Install system dependencies and Poetry in a single layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     curl \
     supervisor \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && curl -sSL https://install.python-poetry.org | python3 - \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/*
 
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
-ENV PATH="/root/.local/bin:$PATH"
-
-# Set the working directory
-WORKDIR /app
-
-# Add the application directory to the Python path
-ENV PYTHONPATH=/app
-
-# Copy project files
+# Copy only necessary files for dependency installation
 COPY pyproject.toml poetry.lock /app/
 
-# Copy the application code
-COPY . /app/
+# Install only production dependencies
+RUN poetry install --no-root --no-cache
 
-RUN poetry install --no-root 
+# Copy the rest of the application code
+COPY . /app/
 
 # Copy Supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf

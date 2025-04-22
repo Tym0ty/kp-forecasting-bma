@@ -1,3 +1,6 @@
 data/*
 catboost_info/
 __pycache__/
+uploads/
+output/
+log/
