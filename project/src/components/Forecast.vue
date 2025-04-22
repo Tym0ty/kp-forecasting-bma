@@ -16,6 +16,11 @@
           <p>WARNA_BARANG: {{ parsedTarget.warnaBarang }}</p>
           <p>UKURAN_BARANG: {{ parsedTarget.ukuranBarang }}</p>
         </div>
+        <select v-model="forecastPeriod" class="forecast-period-select">
+          <option value="week">1 Week Ahead</option>
+          <option value="month">1 Month Ahead</option>
+          <option value="year">1 Year Ahead</option>
+        </select>
       </div>
       <button @click="uploadCSV" :disabled="!selectedFile || !isValidTarget" class="upload-button">
         Upload and Process
@@ -42,6 +47,19 @@
     <!-- Forecast Data Table -->
     <div v-if="forecastData.length" class="result">
       <h3>Forecast Data</h3>
+      <div class="pagination-controls">
+        <select v-model="itemsPerPage" class="page-size-select">
+          <option value="5">5 per page</option>
+          <option value="10">10 per page</option>
+          <option value="20">20 per page</option>
+          <option value="50">50 per page</option>
+        </select>
+        <div class="pagination-buttons">
+          <button @click="currentPage--" :disabled="currentPage === 1" class="pagination-button">Previous</button>
+          <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
+          <button @click="currentPage++" :disabled="currentPage === totalPages" class="pagination-button">Next</button>
+        </div>
+      </div>
       <table class="data-table">
         <thead>
           <tr>
@@ -50,9 +68,9 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(data, index) in forecastData" :key="index">
+          <tr v-for="(data, index) in paginatedData" :key="index">
             <td>{{ data.TANGGAL }}</td>
-            <td>{{ data.BERAT_TOTAL }}</td>
+            <td>{{ data.TOTAL_JUMLAH }}</td>
           </tr>
         </tbody>
       </table>
@@ -101,12 +119,23 @@ export default {
       error: null,
       taskId: null,
       statusCheckInterval: null,
-      parsedTarget: null
+      parsedTarget: null,
+      currentPage: 1,
+      itemsPerPage: 10,
+      forecastPeriod: 'month' // Default to 1 month
     };
   },
   computed: {
     isValidTarget() {
       return this.parsedTarget !== null;
+    },
+    totalPages() {
+      return Math.ceil(this.forecastData.length / this.itemsPerPage);
+    },
+    paginatedData() {
+      const start = (this.currentPage - 1) * this.itemsPerPage;
+      const end = start + this.itemsPerPage;
+      return this.forecastData.slice(start, end);
     }
   },
   watch: {
@@ -214,9 +243,54 @@ export default {
             return obj;
           });
 
-          this.forecastData = data;
-          this.chartData = data.map(item => parseFloat(item.TOTAL_JUMLAH));
-          this.chartLabels = data.map(item => item.TANGGAL);
+          // Filter data based on forecast period
+          let filteredData = data;
+          if (this.forecastPeriod === 'week') {
+            filteredData = data.slice(0, 7); // First 7 days
+          } else if (this.forecastPeriod === 'month') {
+            filteredData = data.slice(0, 30); // First 30 days
+          }
+
+          // Keep daily data for the table
+          this.forecastData = filteredData;
+
+          // Process data for the graph based on forecast period
+          if (this.forecastPeriod === 'year') {
+            // Aggregate data by month for yearly view
+            const monthlyData = {};
+            data.forEach(item => {
+              const date = new Date(item.TANGGAL);
+              const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+              
+              if (!monthlyData[monthKey]) {
+                monthlyData[monthKey] = {
+                  total: 0,
+                  count: 0
+                };
+              }
+              
+              monthlyData[monthKey].total += parseFloat(item.TOTAL_JUMLAH);
+              monthlyData[monthKey].count += 1;
+            });
+
+            const monthlyArray = Object.entries(monthlyData).map(([date, data]) => ({
+              TANGGAL: date,
+              TOTAL_JUMLAH: (data.total / data.count).toFixed(2)
+            })).sort((a, b) => a.TANGGAL.localeCompare(b.TANGGAL));
+
+            this.chartData = monthlyArray.map(item => parseFloat(item.TOTAL_JUMLAH));
+            this.chartLabels = monthlyArray.map(item => {
+              const [year, month] = item.TANGGAL.split('-');
+              return new Date(year, month - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+            });
+          } else {
+            // Use daily data for weekly and monthly views
+            this.chartData = filteredData.map(item => parseFloat(item.TOTAL_JUMLAH));
+            this.chartLabels = filteredData.map(item => {
+              const date = new Date(item.TANGGAL);
+              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
+          }
 
           nextTick(() => {
             this.renderChart();
@@ -244,7 +318,7 @@ export default {
         data: {
           labels: this.chartLabels,
           datasets: [{
-            label: 'BERAT_TOTAL',
+            label: this.forecastPeriod === 'year' ? 'Monthly Average' : 'Daily Value',
             data: this.chartData,
             borderColor: '#4CAF50',
             backgroundColor: 'rgba(76, 175, 80, 0.2)',
@@ -259,13 +333,13 @@ export default {
               type: 'category',
               title: {
                 display: true,
-                text: 'Date'
+                text: this.forecastPeriod === 'year' ? 'Month' : 'Date'
               }
             },
             y: {
               title: {
                 display: true,
-                text: 'Total Weight (BERAT_TOTAL)'
+                text: this.forecastPeriod === 'year' ? 'Average Total Weight' : 'Total Weight'
               }
             }
           }
@@ -450,5 +524,63 @@ canvas {
   padding: 10px;
   background-color: #ffebee;
   border-radius: 5px;
+}
+
+.pagination-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 5px;
+}
+
+.page-size-select {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.pagination-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pagination-button {
+  padding: 8px 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.pagination-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.pagination-button:hover:not(:disabled) {
+  background-color: #45a049;
+}
+
+.page-info {
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.forecast-period-select {
+  font-size: 1.1rem;
+  padding: 10px;
+  margin: 10px 0;
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: white;
 }
 </style>
