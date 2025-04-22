@@ -180,9 +180,9 @@ export default {
       try {
         const status = await checkTaskStatus(this.taskId);
         
-        if (status.filename) {
+        if (status.output_file) {
           clearInterval(this.statusCheckInterval);
-          await this.downloadAndProcessFile(status.filename);
+          await this.downloadAndProcessFile(status.output_file);
           this.isProcessing = false;
         } else if (status.error) {
           clearInterval(this.statusCheckInterval);
@@ -215,7 +215,7 @@ export default {
           });
 
           this.forecastData = data;
-          this.chartData = data.map(item => parseFloat(item.BERAT_TOTAL));
+          this.chartData = data.map(item => parseFloat(item.TOTAL_JUMLAH));
           this.chartLabels = data.map(item => item.TANGGAL);
 
           nextTick(() => {
