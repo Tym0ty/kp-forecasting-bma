@@ -315,7 +315,8 @@ def run_bma_pipeline(filepath, target_product_id):
         "individual_forecasts_test": {name: pd.Series(forecast, index=test_indices)
                                       for name, forecast in individual_forecasts_test.items() if name in final_weights},
         "bma_forecast_test": pd.Series(bma_forecast_test, index=test_indices),
-        "actual_values_test": y_test,
+        "actual_values_test": pd.DataFrame({'TANGGAL': df_filtered.index[-config['TEST_SIZE']:], 'TOTAL_JUMLAH': y_test}),
+        "predictions_test": pd.DataFrame({'TANGGAL': df_filtered.index[-config['TEST_SIZE']:], 'TOTAL_JUMLAH': bma_forecast_test}),
         "bma_metrics_test": bma_metrics_test,
         "individual_metrics_test": individual_metrics_test,
         "cv_mse_scores": cv_mse_scores,

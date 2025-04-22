@@ -1,5 +1,5 @@
 from kp_forecaster.pipeline import run_pipeline, run_bma_pipeline
-from kp_forecaster.plot import plot_forecast
+from kp_forecaster.plot import plot_forecast, plot_test_forecast
 import time
 
 if __name__ == "__main__":
@@ -7,7 +7,7 @@ if __name__ == "__main__":
     # Optional: Create dummy file if needed for placeholder
     # try: load_and_prepare_data(filepath).to_csv(filepath)
     # except Exception as e: print(f"Could not create dummy file: {e}")
-    target_product_id = 'MP000197_KD000028_PL000036_SZ000012'
+    target_product_id = 'MP000294_KD000016_PL000037_SZ000012'
 
     pipeline_results = run_bma_pipeline(filepath, target_product_id)
 
@@ -20,6 +20,7 @@ if __name__ == "__main__":
     
     if pipeline_results:
         plot_forecast(results_df, target_product_id)
+        plot_test_forecast(pipeline_results['predictions_test'], pipeline_results['actual_values_test'], target_product_id)
     else:
         print("BMA pipeline failed, no plot generated.")
 
