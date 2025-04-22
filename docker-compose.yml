@@ -5,3 +5,17 @@ services:
     ports:
       - "6379:6379"
     restart: always
+
+  app:
+    build:
+      context: ./forecaster
+      dockerfile: Dockerfile
+    container_name: "my-app"
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    restart: always
