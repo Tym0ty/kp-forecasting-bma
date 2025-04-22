@@ -151,14 +151,18 @@ export default {
 
       try {
         const response = await uploadCSV(this.selectedFile, this.targetProductId);
-        if (response.task_id) {
+        console.log('Upload response:', response); // Debug log
+        
+        if (response && response.task_id) {
           this.taskId = response.task_id;
           this.startStatusCheck();
         } else {
-          throw new Error('No task ID received from server');
+          console.error('Invalid response format:', response);
+          throw new Error('Server response missing task ID');
         }
       } catch (error) {
-        this.error = error.response?.data?.message || 'Error uploading file. Please try again.';
+        console.error('Upload error details:', error);
+        this.error = error.response?.data?.message || error.message || 'Error uploading file. Please try again.';
         this.isProcessing = false;
       }
     },
