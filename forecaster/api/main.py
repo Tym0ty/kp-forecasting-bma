@@ -33,11 +33,13 @@ app = FastAPI(
 
 app.add_middleware(LimitUploadSizeMiddleware, max_upload_size=50 * 1024 * 1024)  # 50 MB
 
+redis_host = os.getenv('REDIS_HOST', 'localhost')
+
 # Configure Celery
 celery = Celery(
     "tasks",
-    broker="redis://localhost:6379/0",  # Redis as the message broker
-    backend="redis://localhost:6379/0"  # Redis as the result backend
+    broker=f'redis://{redis_host}:6379/0',  # Redis as the message broker
+    backend=f'redis://{redis_host}:6379/0'  # Redis as the result backend
 )
 
 # Directory to save uploaded and processed files
