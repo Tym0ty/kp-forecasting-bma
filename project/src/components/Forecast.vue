@@ -151,15 +151,22 @@ export default {
 
       try {
         const response = await uploadCSV(this.selectedFile, this.targetProductId);
-        this.taskId = response.task_id;
-        this.startStatusCheck();
+        if (response.task_id) {
+          this.taskId = response.task_id;
+          this.startStatusCheck();
+        } else {
+          throw new Error('No task ID received from server');
+        }
       } catch (error) {
-        this.error = 'Error uploading file. Please try again.';
+        this.error = error.response?.data?.message || 'Error uploading file. Please try again.';
         this.isProcessing = false;
       }
     },
 
     startStatusCheck() {
+      if (this.statusCheckInterval) {
+        clearInterval(this.statusCheckInterval);
+      }
       this.statusCheckInterval = setInterval(this.checkStatus, 2000);
     },
 
@@ -169,18 +176,20 @@ export default {
       try {
         const status = await checkTaskStatus(this.taskId);
         
-        if (status.status === 'Completed') {
+        if (status.filename) {
           clearInterval(this.statusCheckInterval);
-          await this.downloadAndProcessFile(status.output_file);
-        } else if (status.status === 'Failed') {
+          await this.downloadAndProcessFile(status.filename);
+          this.isProcessing = false;
+        } else if (status.error) {
           clearInterval(this.statusCheckInterval);
-          this.error = 'Processing failed: ' + status.message;
+          this.error = 'Processing failed: ' + status.error;
           this.isProcessing = false;
         }
+        // Continue polling if no filename or error is received
       } catch (error) {
-        clearInterval(this.statusCheckInterval);
-        this.error = 'Error checking status. Please try again.';
-        this.isProcessing = false;
+        // Don't clear interval on network errors, keep trying
+        this.error = 'Error checking status. Retrying...';
+        console.error('Status check error:', error);
       }
     },
 
