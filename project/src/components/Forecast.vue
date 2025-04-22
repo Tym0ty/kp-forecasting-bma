@@ -21,11 +21,6 @@
           <p>WARNA_BARANG: {{ parsedTarget.warnaBarang }}</p>
           <p>UKURAN_BARANG: {{ parsedTarget.ukuranBarang }}</p>
         </div>
-        <select v-model="forecastPeriod" class="forecast-period-select">
-          <option value="week">1 Week Ahead</option>
-          <option value="month">1 Month Ahead</option>
-          <option value="year">1 Year Ahead</option>
-        </select>
       </div>
       <button @click="uploadCSV" :disabled="!selectedFile || !isValidTarget" class="upload-button">
         Upload and Process
@@ -46,6 +41,11 @@
     <!-- Forecast Graph -->
     <div v-if="chartData.length" class="result">
       <h3>Forecast Graph</h3>
+      <select v-model="forecastPeriod" class="forecast-period-select">
+        <option value="week">1 Week View</option>
+        <option value="month">1 Month View</option>
+        <option value="year">1 Year View</option>
+      </select>
       <canvas id="forecastChart" width="400" height="200"></canvas>
     </div>
 
@@ -116,7 +116,8 @@ export default {
     return {
       selectedFile: null,
       targetProductId: '',
-      forecastData: [],
+      originalData: [], // Store the complete original data
+      forecastData: [], // This will be the filtered view for the table
       chartData: [],
       chartLabels: [],
       chartInstance: null,
@@ -127,12 +128,8 @@ export default {
       parsedTarget: null,
       currentPage: 1,
       itemsPerPage: 10,
-      forecastPeriod: 'month' // Default to 1 month
+      forecastPeriod: 'month'
     };
-  },
-  mounted() {
-    // Load cached data when component mounts
-    this.loadCachedData();
   },
   computed: {
     isValidTarget() {
@@ -152,100 +149,25 @@ export default {
       this.parseTargetProductId(newValue);
     },
     forecastPeriod() {
-      // Reprocess data with new period if we have data
-      if (this.forecastData.length > 0) {
-        this.processForecastData(this.forecastData);
-        // Update cache with new period
-        this.saveCacheData(this.forecastData);
+      this.updateForecastView();
+    }
+  },
+  async mounted() {
+    // Try to load the most recent data from the output folder
+    try {
+      const response = await fetch('http://localhost:8000/latest-output/');
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.length > 0) {
+          this.originalData = data;
+          this.updateForecastView();
+        }
       }
+    } catch (error) {
+      console.error('Error loading recent data:', error);
     }
   },
   methods: {
-    loadCachedData() {
-      try {
-        const cachedData = localStorage.getItem('forecastCache');
-        if (cachedData) {
-          const { forecastData, targetProductId, forecastPeriod } = JSON.parse(cachedData);
-          this.targetProductId = targetProductId;
-          this.forecastPeriod = forecastPeriod;
-          this.parseTargetProductId(targetProductId);
-          
-          // Process the cached data
-          this.processForecastData(forecastData);
-        }
-      } catch (error) {
-        console.error('Error loading cached data:', error);
-      }
-    },
-
-    saveCacheData(data) {
-      try {
-        const cacheData = {
-          forecastData: data,
-          targetProductId: this.targetProductId,
-          forecastPeriod: this.forecastPeriod
-        };
-        localStorage.setItem('forecastCache', JSON.stringify(cacheData));
-      } catch (error) {
-        console.error('Error saving cache:', error);
-      }
-    },
-
-    processForecastData(data) {
-      // Filter data based on forecast period
-      let filteredData = data;
-      if (this.forecastPeriod === 'week') {
-        filteredData = data.slice(0, 7); // First 7 days
-      } else if (this.forecastPeriod === 'month') {
-        filteredData = data.slice(0, 30); // First 30 days
-      }
-
-      // Keep daily data for the table
-      this.forecastData = filteredData;
-
-      // Process data for the graph based on forecast period
-      if (this.forecastPeriod === 'year') {
-        // Aggregate data by month for yearly view
-        const monthlyData = {};
-        data.forEach(item => {
-          const date = new Date(item.TANGGAL);
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          
-          if (!monthlyData[monthKey]) {
-            monthlyData[monthKey] = {
-              total: 0,
-              count: 0
-            };
-          }
-          
-          monthlyData[monthKey].total += parseFloat(item.TOTAL_JUMLAH);
-          monthlyData[monthKey].count += 1;
-        });
-
-        const monthlyArray = Object.entries(monthlyData).map(([date, data]) => ({
-          TANGGAL: date,
-          TOTAL_JUMLAH: (data.total / data.count).toFixed(2)
-        })).sort((a, b) => a.TANGGAL.localeCompare(b.TANGGAL));
-
-        this.chartData = monthlyArray.map(item => parseFloat(item.TOTAL_JUMLAH));
-        this.chartLabels = monthlyArray.map(item => {
-          const [year, month] = item.TANGGAL.split('-');
-          return new Date(year, month - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
-        });
-      } else {
-        // Use daily data for weekly and monthly views
-        this.chartData = filteredData.map(item => parseFloat(item.TOTAL_JUMLAH));
-        this.chartLabels = filteredData.map(item => {
-          const date = new Date(item.TANGGAL);
-          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        });
-      }
-
-      nextTick(() => {
-        this.renderChart();
-      });
-    },
-
     parseTargetProductId(id) {
       if (!id) {
         this.parsedTarget = null;
@@ -345,11 +267,8 @@ export default {
             return obj;
           });
 
-          // Save to cache before processing
-          this.saveCacheData(data);
-          
-          // Process the data
-          this.processForecastData(data);
+          this.originalData = data;
+          this.updateForecastView();
           this.isProcessing = false;
         };
 
@@ -358,6 +277,68 @@ export default {
         this.error = 'Error processing downloaded file. Please try again.';
         this.isProcessing = false;
       }
+    },
+
+    updateForecastView() {
+      if (!this.originalData.length) return;
+
+      // Update table data based on period
+      if (this.forecastPeriod === 'week') {
+        this.forecastData = this.originalData.slice(0, 7);
+      } else if (this.forecastPeriod === 'month') {
+        this.forecastData = this.originalData.slice(0, 30);
+      } else {
+        // For year view, show all data in the table
+        this.forecastData = this.originalData;
+      }
+
+      // Update chart data based on period
+      if (this.forecastPeriod === 'year') {
+        // Process monthly data for the chart
+        const monthlyData = {};
+        this.originalData.forEach(item => {
+          const date = new Date(item.TANGGAL);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = {
+              total: 0,
+              count: 0
+            };
+          }
+          
+          monthlyData[monthKey].total += parseFloat(item.TOTAL_JUMLAH);
+          monthlyData[monthKey].count += 1;
+        });
+
+        const monthlyArray = Object.entries(monthlyData)
+          .map(([date, data]) => ({
+            TANGGAL: date,
+            TOTAL_JUMLAH: (data.total / data.count).toFixed(2)
+          }))
+          .sort((a, b) => a.TANGGAL.localeCompare(b.TANGGAL));
+
+        this.chartData = monthlyArray.map(item => parseFloat(item.TOTAL_JUMLAH));
+        this.chartLabels = monthlyArray.map(item => {
+          const [year, month] = item.TANGGAL.split('-');
+          return new Date(year, month - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+        });
+      } else {
+        // For week and month views, show daily data in the chart
+        const filteredData = this.forecastPeriod === 'week' 
+          ? this.originalData.slice(0, 7) 
+          : this.originalData.slice(0, 30);
+
+        this.chartData = filteredData.map(item => parseFloat(item.TOTAL_JUMLAH));
+        this.chartLabels = filteredData.map(item => {
+          const date = new Date(item.TANGGAL);
+          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+      }
+
+      nextTick(() => {
+        this.renderChart();
+      });
     },
 
     renderChart() {
@@ -393,7 +374,7 @@ export default {
             y: {
               title: {
                 display: true,
-                text: this.forecastPeriod === 'year' ? 'Average Total Weight' : 'Total Weight'
+                text: this.forecastPeriod === 'year' ? 'Monthly Average' : 'Daily Value'
               }
             }
           }
