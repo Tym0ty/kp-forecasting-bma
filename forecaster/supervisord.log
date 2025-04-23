@@ -1,0 +1,30 @@
+2025-04-23 22:51:20,217 CRIT Supervisor is running as root.  Privileges were not dropped because no user is specified in the config file.  If you intend to run as root, you can set user=root in the config file to avoid this message.
+2025-04-23 22:51:20,220 INFO supervisord started with pid 1
+2025-04-23 22:51:21,223 INFO spawned: 'celery' with pid 9
+2025-04-23 22:51:21,225 INFO spawned: 'fastapi' with pid 10
+2025-04-23 22:51:22,226 INFO success: celery entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2025-04-23 22:51:22,226 INFO success: fastapi entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2025-04-23 22:51:22,598 INFO exited: celery (exit status 1; not expected)
+2025-04-23 22:51:22,605 INFO spawned: 'celery' with pid 21
+2025-04-23 22:51:22,605 INFO exited: fastapi (exit status 1; not expected)
+2025-04-23 22:51:23,537 INFO spawned: 'fastapi' with pid 27
+2025-04-23 22:51:23,622 INFO success: celery entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2025-04-23 22:51:23,622 INFO exited: celery (exit status 1; not expected)
+2025-04-23 22:51:24,380 INFO spawned: 'celery' with pid 33
+2025-04-23 22:51:24,469 INFO exited: fastapi (exit status 1; not expected)
+2025-04-23 22:51:25,358 INFO exited: celery (exit status 1; not expected)
+2025-04-23 22:51:26,360 INFO spawned: 'celery' with pid 39
+2025-04-23 22:51:26,361 INFO spawned: 'fastapi' with pid 40
+2025-04-23 22:51:27,170 INFO exited: fastapi (exit status 1; not expected)
+2025-04-23 22:51:27,181 INFO exited: celery (exit status 1; not expected)
+2025-04-23 22:51:29,184 INFO spawned: 'celery' with pid 51
+2025-04-23 22:51:29,185 INFO spawned: 'fastapi' with pid 52
+2025-04-23 22:51:30,052 INFO exited: celery (exit status 1; not expected)
+2025-04-23 22:51:30,056 INFO exited: fastapi (exit status 1; not expected)
+2025-04-23 22:51:33,060 INFO spawned: 'celery' with pid 63
+2025-04-23 22:51:33,061 INFO spawned: 'fastapi' with pid 64
+2025-04-23 22:51:33,910 INFO exited: celery (exit status 1; not expected)
+2025-04-23 22:51:33,945 INFO gave up: celery entered FATAL state, too many start retries too quickly
+2025-04-23 22:51:33,945 INFO exited: fastapi (exit status 1; not expected)
+2025-04-23 22:51:34,946 INFO gave up: fastapi entered FATAL state, too many start retries too quickly
+2025-04-23 23:00:45,414 WARN received SIGTERM indicating exit request

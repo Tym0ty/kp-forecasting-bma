@@ -1,5 +1,7 @@
 import duckdb
+import datetime
 from typing import List
+
 
 DUCKDB_FILE = "data/train.duckdb"
 DUCKDB_TABLE = "train_data"
@@ -22,6 +24,27 @@ CREATE TABLE IF NOT EXISTS {DUCKDB_TABLE} (
     JUMLAH INTEGER,
     BERAT_TOTAL FLOAT
 )
+""")
+
+conn.execute(f"""
+    CREATE SEQUENCE IF NOT EXISTS forecast_result_id_seq START 1;
+    CREATE TABLE IF NOT EXISTS {OUTPUT_TABLE} (
+        id INTEGER PRIMARY KEY DEFAULT nextval('forecast_result_id_seq'),
+        product_id TEXT,
+        TANGGAL DATE,
+        TOTAL_JUMLAH FLOAT
+      )
+    """)
+
+conn.execute(f"""
+    CREATE SEQUENCE IF NOT EXISTS forecast_history_id_seq START 1;
+    CREATE TABLE IF NOT EXISTS forecast_history (
+        id INTEGER PRIMARY KEY DEFAULT nextval('forecast_history_id_seq'),
+        product_id TEXT,
+        START_TANGGAL DATE,
+        END_TANGGAL DATE,
+        TIMESTAMP TIMESTAMP DEFAULT NOW(),
+    )
 """)
 
 def get_connection():
@@ -76,18 +99,16 @@ def get_data(target_product_id: str):
 
 def append_forecast_results(product_id: str, rows: List[dict]):
     conn = get_connection()
-    conn.execute(f"""
-      CREATE TABLE IF NOT EXISTS {OUTPUT_TABLE} (
-        id INTEGER PRIMARY KEY,
-        product_id TEXT,
-        TANGGAL DATE,
-        TOTAL_JUMLAH FLOAT
-      )
-    """)
     max_id = conn.execute(f"SELECT MAX(id) FROM {OUTPUT_TABLE}").fetchone()[0]
     if max_id is None:
         max_id = 0
-    for i, r in enumerate(rows):
+    start_tanggal = min(row.TANGGAL for row in rows)
+    end_tanggal = max(row.TANGGAL for row in rows)
+    conn.execute(
+        f"INSERT INTO forecast_history(product_id, START_TANGGAL, END_TANGGAL) VALUES (?, ?, ?)",
+        [product_id, start_tanggal, end_tanggal]
+    )
+    for r in rows:
         # handle both dicts and Pydantic models
         if hasattr(r, "TANGGAL") and hasattr(r, "TOTAL_JUMLAH"):
             tanggal = r.TANGGAL
@@ -97,7 +118,64 @@ def append_forecast_results(product_id: str, rows: List[dict]):
             total = r["TOTAL_JUMLAH"]
 
         conn.execute(
-          f"INSERT INTO {OUTPUT_TABLE}(id, product_id, TANGGAL, TOTAL_JUMLAH) VALUES ({max_id+i},?, ?, ?)",
+          f"INSERT INTO {OUTPUT_TABLE}(product_id, TANGGAL, TOTAL_JUMLAH) VALUES (?, ?, ?)",
           [product_id, tanggal, total]
         )
     conn.close()
+
+def get_history_forecast(as_dict: bool = False):
+    """
+    Fetch the forecast history from the database.
+
+    Args:
+        as_dict (bool): If True, return the result as a list of dictionaries. 
+                        Otherwise, return as a list of tuples.
+
+    Returns:
+        List[dict] or List[tuple]: The forecast history data.
+    """
+    conn = get_connection()
+    query = f"""
+    SELECT id, product_id, 
+           START_TANGGAL::TEXT as START_TANGGAL, 
+           END_TANGGAL::TEXT as END_TANGGAL, 
+           TIMESTAMP::TEXT as TIMESTAMP
+    FROM forecast_history
+    """
+    cursor = conn.execute(query)
+    result = cursor.fetchall()
+    
+    if as_dict:
+        columns = [desc[0] for desc in cursor.description]
+        conn.close()
+        return [dict(zip(columns, row)) for row in result]
+    
+    conn.close()
+    return result
+
+def get_forecast_by_product_id(start_date: str, end_date:str, product_id: str):
+    """
+    Fetch forecast data for a specific product ID within a date range.
+
+    Args:
+        start_date (str): The start date in 'YYYY-MM-DD' format.
+        end_date (str): The end date in 'YYYY-MM-DD' format.
+        product_id (str): The product ID to filter by.
+
+    Returns:
+        List[dict]: A list of dictionaries containing the forecast data.
+    """
+    conn = get_connection()
+    query = f"""
+    SELECT TANGGAL::TEXT as TANGGAL, TOTAL_JUMLAH
+    FROM {OUTPUT_TABLE}
+    WHERE TANGGAL BETWEEN '{start_date}' AND '{end_date}'
+      AND product_id = '{product_id}'
+    """
+    cursor = conn.execute(query)
+    result = cursor.fetchall()
+    
+    columns = [desc[0] for desc in cursor.description]
+    conn.close()
+    
+    return [dict(zip(columns, row)) for row in result]

@@ -31,3 +31,4 @@ def process_csv_task(filepath: str, target_product_id: str):
     resp = requests.post(f"{FASTAPI_URL}/internal/store-forecast", json=payload)
     resp.raise_for_status()
     return resp.json()
+

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from .tasks import process_csv_task
-from .db import validate_and_append_to_db, get_data, append_forecast_results
+from .db import validate_and_append_to_db, get_data, append_forecast_results, get_history_forecast, get_forecast_by_product_id
 import os
 from datetime import date
 from pydantic import BaseModel
@@ -105,14 +105,45 @@ async def get_task_status(task_id: str):
     
     return JSONResponse(response)
 
-@router.get("/download/{filename}")
-def download_file(filename: str):
+@router.get("/forecast-history/")
+def get_forecast_history():
     """
-    Endpoint to download the processed CSV file.
+    Endpoint to get the forecast history.
     """
-    file_path = os.path.join(OUTPUT_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, media_type="text/csv", filename=filename)
-    else:
-        return JSONResponse({"error": "File not found"}, status_code=404)
+    try:
+        history = get_history_forecast()
+        return JSONResponse(history)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/forecast/{product_id}")
+def get_forecast(
+    product_id: str,
+    start_date: date,
+    end_date: date
+):
+    """
+    Endpoint to get the forecast for a specific product ID.
+    """
+    try:
+        res = get_forecast_by_product_id(start_date, end_date, product_id)
+        if len(res) == 0:
+            raise HTTPException(status_code=404, detail="No forecast data found.")
+        return JSONResponse(res)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+
+# @router.get("/download/{filename}")
+# def download_file(filename: str):
+#     """
+#     Endpoint to download the processed CSV file.
+#     """
+#     file_path = os.path.join(OUTPUT_DIR, filename)
+#     if os.path.exists(file_path):
+#         return FileResponse(file_path, media_type="text/csv", filename=filename)
+#     else:
+#         return JSONResponse({"error": "File not found"}, status_code=404)
     
