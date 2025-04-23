@@ -1,49 +1,33 @@
+import os, requests
 from celery import Celery
-import os
-import time
 from kp_forecaster.pipeline import run_bma_pipeline
 
-redis_host = os.getenv('REDIS_HOST', 'localhost')
+redis_host = os.getenv("REDIS_HOST", "localhost")
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 
-# Configure Celery
 celery = Celery(
     "tasks",
-    broker=f'redis://{redis_host}:6379/0',
-    backend=f'redis://{redis_host}:6379/0'
+    broker=f"redis://{redis_host}:6379/0",
+    backend=f"redis://{redis_host}:6379/0"
 )
-
-OUTPUT_TABLE = "forecast_results"
 
 @celery.task
 def process_csv_task(filepath: str, target_product_id: str):
-    """
-    Celery task to process the uploaded CSV file and store the results in the database.
-    """
-    pipeline_results = run_bma_pipeline(filepath, target_product_id)
+    results = run_bma_pipeline(filepath, target_product_id)
+    if not results:
+        return {"status": "failed"}
 
-    if pipeline_results:
-        results_df = pipeline_results['future_forecast']
-        conn = get_connection()  # Get a new DuckDB connection
+    future_df = results["future_forecast"]
+    # Convert TANGGAL (Timestamp) to ISO‐formatted string for JSON serialization
+    future_df["TANGGAL"] = future_df["TANGGAL"].dt.strftime("%Y-%m-%d")
 
-        # Ensure the output table exists
-        conn.execute(f"""
-        CREATE TABLE IF NOT EXISTS {OUTPUT_TABLE} (
-            id INTEGER AUTO_INCREMENT,
-            product_id TEXT,
-            TANGGAL DATE,
-            TOTAL_JUMLAH FLOAT
-        )
-        """)
+    payload = {
+        "product_id": target_product_id,
+        "results": future_df.to_dict(orient="records")
+    }
 
-        # Insert the results into the database
-        for _, row in results_df.iterrows():
-            conn.execute(f"""
-            INSERT INTO {OUTPUT_TABLE} (product_id, TANGGAL, TOTAL_JUMLAH)
-            VALUES ('{target_product_id}', '{row['TANGGAL']}', {row['TOTAL_JUMLAH']})
-            """)
+    print(f"payload: {payload}")
 
-        conn.close()  # Close the connection
-        return {"status": "success", "message": "Results stored in the database"}
-    else:
-        return {"status": "failed", "message": "Pipeline failed"}
-
+    resp = requests.post(f"{FASTAPI_URL}/internal/store-forecast", json=payload)
+    resp.raise_for_status()
+    return resp.json()

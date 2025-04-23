@@ -1,8 +1,10 @@
 from fastapi import APIRouter, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from .tasks import process_csv_task
-from .db import validate_and_append_to_db, get_data
+from .db import validate_and_append_to_db, get_data, append_forecast_results
 import os
+from datetime import date
+from pydantic import BaseModel
 
 # Directory to save uploaded and processed files
 UPLOAD_DIR = "uploads"
@@ -11,6 +13,26 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 router = APIRouter()
+
+class ForecastRow(BaseModel):
+    TANGGAL: date
+    TOTAL_JUMLAH: float
+
+class StoreForecast(BaseModel):
+    product_id: str
+    results: list[ForecastRow]
+
+@router.post("/internal/store-forecast")
+async def store_forecast(payload: StoreForecast):
+    """
+    Internal endpoint: Celery calls this to persist forecast results.
+    """
+    try:
+        append_forecast_results(payload.product_id, payload.results)
+    except Exception as e:
+        print(f"error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "ok"}
 
 @router.post("/upload-train-csv/")
 async def upload_train_csv(
@@ -57,6 +79,31 @@ async def process_csv(
         {"message": "CSV processing started.", "task_id": task.id},
         status_code=202
     )
+
+# Endpoint to check status task
+@router.get("/task-status/{task_id}")
+async def get_task_status(task_id: str):
+    """
+    Endpoint to check the status of a Celery task.
+    """
+    task = process_csv_task.AsyncResult(task_id)
+    if task.state == "PENDING":
+        response = {
+            "state": task.state,
+            "status": "Pending..."
+        }
+    elif task.state != "FAILURE":
+        response = {
+            "state": task.state,
+            "result": task.result
+        }
+    else:
+        response = {
+            "state": task.state,
+            "error": str(task.info)  # This will be the exception raised
+        }
+    
+    return JSONResponse(response)
 
 @router.get("/download/{filename}")
 def download_file(filename: str):

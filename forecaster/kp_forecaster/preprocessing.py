@@ -1,8 +1,8 @@
 import pandas as pd
 from kp_forecaster.config import PRODUCT_ID_COLS, TARGET_COLUMN, DATE_COLUMN, RESAMPLE_FREQ
 
-def load_and_prepare_data(filepath):
-    df = pd.read_csv(filepath, parse_dates=[DATE_COLUMN])
+def load_and_prepare_data(file_path):
+    df = pd.read_csv(file_path, parse_dates=[DATE_COLUMN])
     for col in PRODUCT_ID_COLS:
         df[col] = df[col].astype(str)
     df['PRODUCT_ID'] = df[PRODUCT_ID_COLS].agg('_'.join, axis=1)

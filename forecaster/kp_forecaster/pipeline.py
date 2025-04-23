@@ -34,7 +34,7 @@ def run_pipeline(filepath):
     
     return results
 
-def run_bma_pipeline(filepath, target_product_id):
+def run_bma_pipeline(file_path, target_product_id):
     """
     Runs the full pipeline including BMA weight calculation, evaluation,
     and future forecasting. (LSTM functionality removed)
@@ -62,7 +62,7 @@ def run_bma_pipeline(filepath, target_product_id):
 
     # 1. Load and Prepare Data
     try:
-        df_raw = load_and_prepare_data(filepath)
+        df_raw = load_and_prepare_data(file_path)
         df_filtered = filter_product(df_raw, target_product_id)
         if df_filtered.empty:
             print(f"ERROR: No data found for product {target_product_id}")

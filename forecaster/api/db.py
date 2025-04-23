@@ -1,9 +1,10 @@
 import duckdb
+from typing import List
 
 DUCKDB_FILE = "data/train.duckdb"
 DUCKDB_TABLE = "train_data"
+OUTPUT_TABLE = "forecast_results"
 
-# Initialize DuckDB connection
 conn = duckdb.connect(DUCKDB_FILE)
 
 # Ensure the table exists
@@ -72,3 +73,31 @@ def get_data(target_product_id: str):
     df = conn.execute(query).fetchdf()
     conn.close()  # Close the connection
     return df
+
+def append_forecast_results(product_id: str, rows: List[dict]):
+    conn = get_connection()
+    conn.execute(f"""
+      CREATE TABLE IF NOT EXISTS {OUTPUT_TABLE} (
+        id INTEGER PRIMARY KEY,
+        product_id TEXT,
+        TANGGAL DATE,
+        TOTAL_JUMLAH FLOAT
+      )
+    """)
+    max_id = conn.execute(f"SELECT MAX(id) FROM {OUTPUT_TABLE}").fetchone()[0]
+    if max_id is None:
+        max_id = 0
+    for i, r in enumerate(rows):
+        # handle both dicts and Pydantic models
+        if hasattr(r, "TANGGAL") and hasattr(r, "TOTAL_JUMLAH"):
+            tanggal = r.TANGGAL
+            total = r.TOTAL_JUMLAH
+        else:
+            tanggal = r["TANGGAL"]
+            total = r["TOTAL_JUMLAH"]
+
+        conn.execute(
+          f"INSERT INTO {OUTPUT_TABLE}(id, product_id, TANGGAL, TOTAL_JUMLAH) VALUES ({max_id+i},?, ?, ?)",
+          [product_id, tanggal, total]
+        )
+    conn.close()
