@@ -2,16 +2,6 @@
   <div class="upload-page">
     <h1>Upload Data</h1>
     <div class="upload-container">
-      <div class="target-inputs">
-        <input type="text" v-model="targetProductId" placeholder="Enter Target Product ID" class="product-input" />
-        <div class="target-details" v-if="parsedTarget">
-          <p>KODE_BARANG: {{ parsedTarget.kodeBarang }}</p>
-          <p>KLASIFIKASI_BARANG: {{ parsedTarget.klasifikasiBarang }}</p>
-          <p>WARNA_BARANG: {{ parsedTarget.warnaBarang }}</p>
-          <p>UKURAN_BARANG: {{ parsedTarget.ukuranBarang }}</p>
-        </div>
-      </div>
-
       <div class="upload-area" 
            @dragover.prevent 
            @drop.prevent="handleFileDrop"
@@ -32,8 +22,8 @@
 
       <div v-if="selectedFile" class="file-info">
         <p>Selected file: {{ selectedFile.name }}</p>
-        <button @click="uploadCSV" :disabled="!selectedFile || !isValidTarget || uploading" class="upload-button">
-          {{ uploading ? 'Uploading...' : 'Upload and Process' }}
+        <button @click="uploadFile" class="upload-button" :disabled="uploading">
+          {{ uploading ? 'Uploading...' : 'Upload' }}
         </button>
       </div>
 
@@ -50,54 +40,18 @@
 </template>
 
 <script>
-import { uploadCSV, checkTaskStatus, downloadFile } from '../services/api';
-
 export default {
   name: 'UploadPage',
   data() {
     return {
       selectedFile: null,
-      targetProductId: '',
       isDragging: false,
       uploading: false,
       isProcessing: false,
-      error: null,
-      taskId: null,
-      statusCheckInterval: null,
-      parsedTarget: null
-    }
-  },
-  computed: {
-    isValidTarget() {
-      return this.parsedTarget !== null;
-    }
-  },
-  watch: {
-    targetProductId(newValue) {
-      this.parseTargetProductId(newValue);
+      error: null
     }
   },
   methods: {
-    parseTargetProductId(id) {
-      if (!id) {
-        this.parsedTarget = null;
-        return;
-      }
-
-      const parts = id.split('_');
-      if (parts.length !== 4) {
-        this.parsedTarget = null;
-        return;
-      }
-
-      this.parsedTarget = {
-        kodeBarang: parts[0],
-        klasifikasiBarang: parts[1],
-        warnaBarang: parts[2],
-        ukuranBarang: parts[3]
-      };
-    },
-
     handleFileSelect(event) {
       this.selectedFile = event.target.files[0];
       this.error = null;
@@ -109,92 +63,35 @@ export default {
       this.error = null;
     },
 
-    async uploadCSV() {
-      if (!this.selectedFile || !this.isValidTarget) {
-        this.error = 'Please select a file and enter a valid target product ID';
+    async uploadFile() {
+      if (!this.selectedFile) {
+        this.error = 'Please select a file';
         return;
       }
 
-      this.isProcessing = true;
+      this.uploading = true;
       this.error = null;
 
       try {
-        const response = await uploadCSV(this.selectedFile, this.targetProductId);
-        
-        if (response && response.task_id) {
-          this.taskId = response.task_id;
-          this.startStatusCheck();
-        } else {
-          throw new Error('Server response missing task ID');
+        const formData = new FormData();
+        formData.append('file', this.selectedFile);
+
+        const response = await fetch('http://localhost:8000/upload/', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('Upload failed');
         }
-      } catch (error) {
-        console.error('Upload error details:', error);
-        this.error = error.response?.data?.message || error.message || 'Error uploading file. Please try again.';
-        this.isProcessing = false;
+
+        // Handle successful upload
+        this.$router.push('/');
+      } catch (err) {
+        this.error = 'Failed to upload file. Please try again.';
+      } finally {
+        this.uploading = false;
       }
-    },
-
-    startStatusCheck() {
-      if (this.statusCheckInterval) {
-        clearInterval(this.statusCheckInterval);
-      }
-      this.statusCheckInterval = setInterval(this.checkStatus, 2000);
-    },
-
-    async checkStatus() {
-      if (!this.taskId) return;
-
-      try {
-        const status = await checkTaskStatus(this.taskId);
-        
-        if (status.output_file) {
-          clearInterval(this.statusCheckInterval);
-          await this.downloadAndProcessFile(status.output_file);
-          this.isProcessing = false;
-          this.$router.push('/');
-        } else if (status.error) {
-          clearInterval(this.statusCheckInterval);
-          this.error = 'Processing failed: ' + status.error;
-          this.isProcessing = false;
-        }
-      } catch (error) {
-        this.error = 'Error checking status. Retrying...';
-        console.error('Status check error:', error);
-      }
-    },
-
-    async downloadAndProcessFile(filename) {
-      try {
-        const blob = await downloadFile(filename);
-        const reader = new FileReader();
-        
-        reader.onload = (e) => {
-          const text = e.target.result;
-          const rows = text.split('\n').map(row => row.split(','));
-          const headers = rows[0];
-          const data = rows.slice(1).map(row => {
-            const obj = {};
-            headers.forEach((header, index) => {
-              obj[header] = row[index];
-            });
-            return obj;
-          });
-
-          // Store the data in localStorage
-          localStorage.setItem('forecastData', JSON.stringify(data));
-          localStorage.setItem('forecastDataTimestamp', Date.now().toString());
-        };
-
-        reader.readAsText(blob);
-      } catch (error) {
-        this.error = 'Error processing downloaded file. Please try again.';
-        this.isProcessing = false;
-      }
-    }
-  },
-  beforeUnmount() {
-    if (this.statusCheckInterval) {
-      clearInterval(this.statusCheckInterval);
     }
   }
 }
@@ -208,33 +105,10 @@ export default {
 .upload-container {
   max-width: 600px;
   margin: 0 auto;
-}
-
-.target-inputs {
-  width: 100%;
-  margin-bottom: 2rem;
-}
-
-.product-input {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
   background-color: white;
-  margin-bottom: 1rem;
-}
-
-.target-details {
-  padding: 1rem;
-  background-color: #f5f5f5;
-  border-radius: 6px;
-  text-align: left;
-}
-
-.target-details p {
-  margin: 0.5rem 0;
-  color: #333;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .upload-area {

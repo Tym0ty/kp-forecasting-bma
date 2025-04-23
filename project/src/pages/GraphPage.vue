@@ -1,6 +1,32 @@
 <template>
   <div class="graph-page">
     <h1>Forecasting Results</h1>
+    
+    <!-- Product ID Input -->
+    <div class="input-section">
+      <div class="product-input-container">
+        <input 
+          type="text" 
+          v-model="targetProductId" 
+          placeholder="Enter Target Product ID" 
+          class="product-input"
+        />
+        <button 
+          @click="fetchForecast" 
+          class="fetch-button"
+          :disabled="!isValidTarget || loading"
+        >
+          {{ loading ? 'Loading...' : 'Get Forecast' }}
+        </button>
+      </div>
+      <div class="target-details" v-if="parsedTarget">
+        <p>KODE_BARANG: {{ parsedTarget.kodeBarang }}</p>
+        <p>KLASIFIKASI_BARANG: {{ parsedTarget.klasifikasiBarang }}</p>
+        <p>WARNA_BARANG: {{ parsedTarget.warnaBarang }}</p>
+        <p>UKURAN_BARANG: {{ parsedTarget.ukuranBarang }}</p>
+      </div>
+    </div>
+
     <div class="graph-container">
       <!-- Loading State -->
       <div v-if="loading" class="loading">
@@ -89,6 +115,8 @@ export default {
     return {
       loading: false,
       error: null,
+      targetProductId: '',
+      parsedTarget: null,
       originalData: [], // Store the complete original data
       forecastData: [], // This will be the filtered view for the table
       chartData: [],
@@ -100,6 +128,9 @@ export default {
     };
   },
   computed: {
+    isValidTarget() {
+      return this.parsedTarget !== null;
+    },
     totalPages() {
       return Math.ceil(this.forecastData.length / this.itemsPerPage);
     },
@@ -110,47 +141,58 @@ export default {
     }
   },
   watch: {
+    targetProductId(newValue) {
+      this.parseTargetProductId(newValue);
+    },
     forecastPeriod() {
       this.updateForecastView();
     }
   },
-  async mounted() {
-    await this.loadSavedData();
-  },
   methods: {
-    async loadSavedData() {
-      // First try to load from localStorage
-      const cachedData = localStorage.getItem('forecastData');
-      const cachedTimestamp = localStorage.getItem('forecastDataTimestamp');
-      const cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-
-      if (cachedData && cachedTimestamp) {
-        const timestamp = parseInt(cachedTimestamp);
-        if (Date.now() - timestamp < cacheExpiry) {
-          try {
-            this.originalData = JSON.parse(cachedData);
-            this.updateForecastView();
-            return;
-          } catch (e) {
-            console.error('Error parsing cached data:', e);
-          }
-        }
+    parseTargetProductId(id) {
+      if (!id) {
+        this.parsedTarget = null;
+        return;
       }
 
-      // If cache is missing or expired, try to load from server
+      const parts = id.split('_');
+      if (parts.length !== 4) {
+        this.parsedTarget = null;
+        return;
+      }
+
+      this.parsedTarget = {
+        kodeBarang: parts[0],
+        klasifikasiBarang: parts[1],
+        warnaBarang: parts[2],
+        ukuranBarang: parts[3]
+      };
+    },
+
+    async fetchForecast() {
+      if (!this.isValidTarget) {
+        this.error = 'Please enter a valid product ID';
+        return;
+      }
+
+      this.loading = true;
+      this.error = null;
+
       try {
-        const response = await fetch('http://localhost:8000/latest-output/');
-        if (response.ok) {
-          const data = await response.json();
-          if (data && data.length > 0) {
-            this.originalData = data;
-            this.updateForecastView();
-            // Update cache
-            this.updateCache(data);
-          }
+        const response = await fetch(`http://localhost:8000/forecast/${this.targetProductId}/`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch forecast data');
         }
+
+        const data = await response.json();
+        this.originalData = data;
+        this.updateCache(data);
+        this.updateForecastView();
       } catch (error) {
-        console.error('Error loading recent data:', error);
+        this.error = 'Error fetching forecast data. Please try again.';
+        console.error('Fetch error:', error);
+      } finally {
+        this.loading = false;
       }
     },
 
@@ -275,6 +317,60 @@ export default {
 <style scoped>
 .graph-page {
   padding: 2rem;
+}
+
+.input-section {
+  margin-bottom: 2rem;
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.product-input-container {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.product-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: white;
+}
+
+.fetch-button {
+  padding: 0.75rem 1.5rem;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.fetch-button:hover:not(:disabled) {
+  background-color: #45a049;
+}
+
+.fetch-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.target-details {
+  padding: 1rem;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+}
+
+.target-details p {
+  margin: 0.5rem 0;
+  color: #333;
 }
 
 .graph-container {
