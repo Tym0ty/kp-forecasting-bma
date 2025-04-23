@@ -1,18 +1,21 @@
 <template>
   <div id="app">
-    <TimeSeriesForecast />
+    <AppHeader />
+    <main class="main-content">
+      <router-view></router-view>
+    </main>
   </div>
 </template>
 
 <script>
-import TimeSeriesForecast from './components/Forecast.vue';
+import AppHeader from './components/Header.vue'
 
 export default {
   name: 'App',
   components: {
-    TimeSeriesForecast
+    AppHeader
   }
-};
+}
 </script>
 
 <style>
@@ -33,9 +36,31 @@ html, body {
 #app {
   width: 100%;
   min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 2rem;
+}
+
+.main-content {
+  padding: 4rem 2rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    padding: 4rem 1rem 1rem;
+  }
+}
+
+#app {
+  font-family: Avenir, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #2c3e50;
+  min-height: 100vh;
+  background-color: #f8f9fa;
+}
+
+body {
+  margin: 0;
+  padding: 0;
 }
 </style>
