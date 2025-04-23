@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "chart.js": "^4.4.9"
+    "chart.js": "^4.4.9",
+    "duckdb": "^1.2.1"
   }
 }
