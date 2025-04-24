@@ -15,6 +15,16 @@ const routes = [
     path: '/upload',
     name: 'Upload',
     component: UploadPage
+  },
+  {
+    path: '/forecast-history',
+    name: 'ForecastHistory',
+    component: () => import('../pages/ForecastHistoryPage.vue')
+  },
+  {
+    path: '/forecast',
+    name: 'Forecast',
+    component: () => import('../pages/ForecastPage.vue')
   }
 ]
 

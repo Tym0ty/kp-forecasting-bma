@@ -2,7 +2,7 @@
   <div class="graph-page">
     <h1>Forecasting Results</h1>
     
-    <!-- Product ID Input -->
+    <!-- Product ID & Date Inputs -->
     <div class="input-section">
       <div class="product-input-container">
         <input 
@@ -11,10 +11,22 @@
           placeholder="Enter Target Product ID" 
           class="product-input"
         />
+        <input 
+          type="date" 
+          v-model="startDate" 
+          class="date-picker" 
+          :max="endDate || null"
+        />
+        <input 
+          type="date" 
+          v-model="endDate" 
+          class="date-picker" 
+          :min="startDate || null"
+        />
         <button 
           @click="fetchForecast" 
           class="fetch-button"
-          :disabled="!isValidTarget || loading"
+          :disabled="!canFetch"
         >
           {{ loading ? 'Loading...' : 'Get Forecast' }}
         </button>
@@ -124,12 +136,17 @@ export default {
       chartInstance: null,
       currentPage: 1,
       itemsPerPage: 10,
-      forecastPeriod: localStorage.getItem('lastForecastPeriod') || 'month'
+      forecastPeriod: localStorage.getItem('lastForecastPeriod') || 'month',
+      startDate: null,
+      endDate: null
     };
   },
   computed: {
     isValidTarget() {
       return this.parsedTarget !== null;
+    },
+    canFetch() {
+      return this.isValidTarget && this.startDate && this.endDate;
     },
     totalPages() {
       return Math.ceil(this.forecastData.length / this.itemsPerPage);
@@ -170,8 +187,8 @@ export default {
     },
 
     async fetchForecast() {
-      if (!this.isValidTarget) {
-        this.error = 'Please enter a valid product ID';
+      if (!this.canFetch) {
+        this.error = 'Please enter a valid product ID and date range';
         return;
       }
 
@@ -179,7 +196,7 @@ export default {
       this.error = null;
 
       try {
-        const response = await fetch(`http://localhost:8000/forecast/${this.targetProductId}/`);
+        const response = await fetch(`http://localhost:8000/forecast/${this.targetProductId}/?start_date=${this.startDate}&end_date=${this.endDate}`);
         if (!response.ok) {
           throw new Error('Failed to fetch forecast data');
         }
@@ -335,6 +352,14 @@ export default {
 
 .product-input {
   flex: 1;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: white;
+}
+
+.date-picker {
   padding: 0.75rem 1rem;
   font-size: 1rem;
   border: 1px solid #ddd;
@@ -512,4 +537,4 @@ canvas {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-</style> 
+</style>
