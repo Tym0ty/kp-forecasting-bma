@@ -1,8 +1,9 @@
 import duckdb
 import datetime
 from typing import List
+import os
 
-
+os.makedirs("data", exist_ok=True)
 DUCKDB_FILE = "data/train.duckdb"
 DUCKDB_TABLE = "train_data"
 OUTPUT_TABLE = "forecast_results"
