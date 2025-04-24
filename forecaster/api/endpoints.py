@@ -34,7 +34,7 @@ async def store_forecast(payload: StoreForecast):
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "ok"}
 
-@router.post("/upload-train-csv/")
+@router.post("/upload/")
 async def upload_train_csv(
     file: UploadFile = UploadFile(...)
 ):
