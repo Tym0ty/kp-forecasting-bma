@@ -34,7 +34,7 @@ def run_pipeline(filepath):
     
     return results
 
-def run_bma_pipeline(file_path, target_product_id):
+def run_bma_pipeline(file_path, target_product_id, future_step=FUTURE_STEPS):
     """
     Runs the full pipeline including BMA weight calculation, evaluation,
     and future forecasting. (LSTM functionality removed)
@@ -54,7 +54,7 @@ def run_bma_pipeline(file_path, target_product_id):
     config = {
         'N_LAGS': N_LAGS, 'N_WEEKS': N_WEEKS, 'ROLL_WINDOWS': ROLL_WINDOWS,
         'TEST_SIZE': TEST_SIZE, 'N_SPLITS_BMA': N_SPLITS_BMA,
-        'RANDOM_STATE': 42, 'FUTURE_FORECAST_STEP': FUTURE_STEPS
+        'RANDOM_STATE': 42, 'FUTURE_FORECAST_STEP': future_step
     }
 
 

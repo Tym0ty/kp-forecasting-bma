@@ -1,10 +1,11 @@
 from fastapi import APIRouter, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from .tasks import process_csv_task
-from .db import validate_and_append_to_db, get_data, append_forecast_results, get_history_forecast, get_forecast_by_product_id
+from .db import validate_and_append_to_db, get_data, append_forecast_results, get_history_forecast, get_train_data_by_product_id
 import os
 from datetime import date
 from pydantic import BaseModel
+import pandas as pd
 
 # Directory to save uploaded and processed files
 UPLOAD_DIR = "uploads"
@@ -59,19 +60,33 @@ async def upload_train_csv(
 # Endpoint to trigger CSV processing
 @router.post("/process-csv/")
 async def process_csv(
-    target_product_id : str
+    target_product_id: str,
+    start_date: date = None,
+    end_date: date = None
 ):
     """
     Endpoint to process the uploaded CSV file asynchronously.
     """
     # Start the background task
     df = get_data(target_product_id)
+
+    if start_date and end_date:
+        df["TANGGAL"] = pd.to_datetime(df["TANGGAL"])  # Ensure TANGGAL is in datetime format
+        df = df[(df["TANGGAL"] < pd.to_datetime(start_date))]
+
     if df.empty:
         raise HTTPException(status_code=404, detail="No data found for the specified product ID.")
+    
     file_path = os.path.join(UPLOAD_DIR, "train.csv")
     df.to_csv(file_path, index=False)
 
-    task = process_csv_task.delay(file_path, target_product_id)
+    future_step = (end_date - start_date).days if start_date and end_date else 0
+    task = process_csv_task.apply_async(
+        args=[file_path, target_product_id],
+        kwargs={"future_step": future_step},
+        countdown=5  # Delay the task by 5 seconds
+    )
+
     if not task:
         raise HTTPException(status_code=500, detail="Task submission failed.")
     
@@ -118,32 +133,45 @@ def get_forecast_history():
     
 @router.get("/forecast/{product_id}")
 def get_forecast(
+        product_id: str,
+    ):
+    """
+    Endpoint to get the forecast history for a specific product ID.
+    """
+    try:
+        history = get_history_forecast(as_dict=True)
+        filtered_history = [entry for entry in history if entry["product_id"] == product_id]
+        if not filtered_history:
+            raise HTTPException(status_code=404, detail="No forecast data found for the specified product ID.")
+        return JSONResponse(filtered_history)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# get train data
+@router.get("/train-data/{product_id}")
+def get_train_data(
     product_id: str,
     start_date: date,
     end_date: date
 ):
     """
-    Endpoint to get the forecast for a specific product ID.
+    Endpoint to get the train data for a specific product ID.
     """
     try:
-        res = get_forecast_by_product_id(start_date, end_date, product_id)
+        res = get_train_data_by_product_id(start_date, end_date, product_id)
         if len(res) == 0:
-            raise HTTPException(status_code=404, detail="No forecast data found.")
+            raise HTTPException(status_code=404, detail="No train data found.")
         return JSONResponse(res)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/download/{filename}")
+async def download_file(filename: str):
+    """
+    Endpoint to download a file.
+    """
+    file_path = os.path.join(OUTPUT_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found.")
     
-
-
-
-# @router.get("/download/{filename}")
-# def download_file(filename: str):
-#     """
-#     Endpoint to download the processed CSV file.
-#     """
-#     file_path = os.path.join(OUTPUT_DIR, filename)
-#     if os.path.exists(file_path):
-#         return FileResponse(file_path, media_type="text/csv", filename=filename)
-#     else:
-#         return JSONResponse({"error": "File not found"}, status_code=404)
-    
+    return FileResponse(file_path, media_type='application/octet-stream', filename=filename)

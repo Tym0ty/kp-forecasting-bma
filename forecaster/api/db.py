@@ -2,11 +2,15 @@ import duckdb
 import datetime
 from typing import List
 import os
+import pandas as pd
 
 os.makedirs("data", exist_ok=True)
 DUCKDB_FILE = "data/train.duckdb"
 DUCKDB_TABLE = "train_data"
 OUTPUT_TABLE = "forecast_results"
+
+OUTPUT_DIR = "output"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 conn = duckdb.connect(DUCKDB_FILE)
 
@@ -28,23 +32,14 @@ CREATE TABLE IF NOT EXISTS {DUCKDB_TABLE} (
 """)
 
 conn.execute(f"""
-    CREATE SEQUENCE IF NOT EXISTS forecast_result_id_seq START 1;
-    CREATE TABLE IF NOT EXISTS {OUTPUT_TABLE} (
-        id INTEGER PRIMARY KEY DEFAULT nextval('forecast_result_id_seq'),
-        product_id TEXT,
-        TANGGAL DATE,
-        TOTAL_JUMLAH FLOAT
-      )
-    """)
-
-conn.execute(f"""
     CREATE SEQUENCE IF NOT EXISTS forecast_history_id_seq START 1;
     CREATE TABLE IF NOT EXISTS forecast_history (
         id INTEGER PRIMARY KEY DEFAULT nextval('forecast_history_id_seq'),
         product_id TEXT,
-        START_TANGGAL DATE,
-        END_TANGGAL DATE,
-        TIMESTAMP TIMESTAMP DEFAULT NOW(),
+        date_start DATE,
+        date_end DATE,
+        csv_path TEXT,
+        timestamp TIMESTAMP DEFAULT NOW()
     )
 """)
 
@@ -100,28 +95,29 @@ def get_data(target_product_id: str):
 
 def append_forecast_results(product_id: str, rows: List[dict]):
     conn = get_connection()
-    max_id = conn.execute(f"SELECT MAX(id) FROM {OUTPUT_TABLE}").fetchone()[0]
-    if max_id is None:
-        max_id = 0
-    start_tanggal = min(row.TANGGAL for row in rows)
-    end_tanggal = max(row.TANGGAL for row in rows)
-    conn.execute(
-        f"INSERT INTO forecast_history(product_id, START_TANGGAL, END_TANGGAL) VALUES (?, ?, ?)",
-        [product_id, start_tanggal, end_tanggal]
-    )
-    for r in rows:
-        # handle both dicts and Pydantic models
-        if hasattr(r, "TANGGAL") and hasattr(r, "TOTAL_JUMLAH"):
-            tanggal = r.TANGGAL
-            total = r.TOTAL_JUMLAH
-        else:
-            tanggal = r["TANGGAL"]
-            total = r["TOTAL_JUMLAH"]
 
-        conn.execute(
-          f"INSERT INTO {OUTPUT_TABLE}(product_id, TANGGAL, TOTAL_JUMLAH) VALUES (?, ?, ?)",
-          [product_id, tanggal, total]
-        )
+    # Determine the date range
+    date_start = min(row.TANGGAL for row in rows)
+    date_end = max(row.TANGGAL for row in rows)
+
+    # Save results to a CSV file
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    csv_filename = f"{product_id}_{date_start}_to_{date_end}_{timestamp}.csv"
+    csv_path = os.path.join(OUTPUT_DIR, csv_filename)
+    df = pd.DataFrame({
+        "TANGGAL": [row.TANGGAL for row in rows],
+        "TOTAL_JUMLAH": [row.TOTAL_JUMLAH for row in rows]
+    })
+    df.to_csv(csv_path, index=False)
+
+    # Insert into forecast_history table
+    conn.execute(
+        f"""
+        INSERT INTO forecast_history (product_id, date_start, date_end, csv_path)
+        VALUES (?, ?, ?, ?)
+        """,
+        [product_id, date_start, date_end, csv_path]
+    )
     conn.close()
 
 def get_history_forecast(as_dict: bool = False):
@@ -138,9 +134,10 @@ def get_history_forecast(as_dict: bool = False):
     conn = get_connection()
     query = f"""
     SELECT id, product_id, 
-           START_TANGGAL::TEXT as START_TANGGAL, 
-           END_TANGGAL::TEXT as END_TANGGAL, 
-           TIMESTAMP::TEXT as TIMESTAMP
+           date_start::TEXT as date_start, 
+           date_end::TEXT as date_end, 
+           csv_path, 
+           timestamp::TEXT as timestamp
     FROM forecast_history
     """
     cursor = conn.execute(query)
@@ -154,9 +151,28 @@ def get_history_forecast(as_dict: bool = False):
     conn.close()
     return result
 
-def get_forecast_by_product_id(start_date: str, end_date:str, product_id: str):
+def get_forecast_by_id(forecast_id: int):
     """
-    Fetch forecast data for a specific product ID within a date range.
+    Fetch forecast results by ID.
+
+    Args:
+        forecast_id (int): The ID of the forecast to fetch.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the forecast results.
+    """
+    conn = get_connection()
+    query = f"""
+    SELECT * FROM {OUTPUT_TABLE}
+    WHERE id = {forecast_id}
+    """
+    df = conn.execute(query).fetchdf()
+    conn.close()
+    return df
+
+def get_train_data_by_product_id(start_data: str, end_date:str, product_id: str):
+    """
+    Fetch train data for a specific product ID within a date range.
 
     Args:
         start_date (str): The start date in 'YYYY-MM-DD' format.
@@ -164,14 +180,18 @@ def get_forecast_by_product_id(start_date: str, end_date:str, product_id: str):
         product_id (str): The product ID to filter by.
 
     Returns:
-        List[dict]: A list of dictionaries containing the forecast data.
+        List[dict]: A list of dictionaries containing the train data.
     """
     conn = get_connection()
+    kode_barang, klasifikasi_barang, warna_barang, ukuran_barang = product_id.split("_")
     query = f"""
-    SELECT TANGGAL::TEXT as TANGGAL, TOTAL_JUMLAH
-    FROM {OUTPUT_TABLE}
-    WHERE TANGGAL BETWEEN '{start_date}' AND '{end_date}'
-      AND product_id = '{product_id}'
+    SELECT TANGGAL::TEXT as TANGGAL, JUMLAH
+    FROM {DUCKDB_TABLE}
+    WHERE TANGGAL BETWEEN '{start_data}' AND '{end_date}'
+      AND KODE_BARANG = '{kode_barang}'
+      AND KLASIFIKASI_BARANG = '{klasifikasi_barang}'
+      AND WARNA_BARANG = '{warna_barang}'
+      AND UKURAN_BARANG = '{ukuran_barang}'
     """
     cursor = conn.execute(query)
     result = cursor.fetchall()

@@ -12,8 +12,12 @@ celery = Celery(
 )
 
 @celery.task
-def process_csv_task(filepath: str, target_product_id: str):
-    results = run_bma_pipeline(filepath, target_product_id)
+def process_csv_task(filepath: str, target_product_id: str, future_step: int = 0):
+    if future_step <= 0:
+        # If future_step is not provided or is less than or equal to 0, set it to 1
+        future_step = 365
+    
+    results = run_bma_pipeline(filepath, target_product_id, future_step=future_step)
     if not results:
         return {"status": "failed"}
 
