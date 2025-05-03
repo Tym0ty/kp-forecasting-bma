@@ -56,10 +56,11 @@
               </div>
             </td>
           </tr>
+          <!-- Graph row -->
           <tr v-if="selectedRow" class="forecast-details-row">
             <td colspan="6">
               <div class="forecast-controls">
-                <h3>Forecast Data</h3>
+                <h3>Forecast and Real Data</h3>
                 <div class="view-selectors">
                   <select v-model="forecastPeriod" class="forecast-period-select" @change="updateForecastView">
                     <option value="year">Year View</option>
@@ -108,6 +109,7 @@ export default {
       forecastError: null,
       forecastData: [],
       originalData: [],
+      realData: [],
       chartData: [],
       chartLabels: [],
       chartInstance: null,
@@ -184,6 +186,7 @@ export default {
         // If clicking the same row, close it
         this.selectedRow = null;
         this.forecastData = [];
+        this.realData = [];
         if (this.chartInstance) {
           this.chartInstance.destroy();
           this.chartInstance = null;
@@ -224,6 +227,21 @@ export default {
           this.originalData.push(entry);
         }
 
+        // Fetch real data
+        const realData = await this.fetchRealData(
+          row.product_id,
+          row.date_start,
+          row.date_end
+        );
+
+        // Store real data
+        this.realData = realData.map(item => ({
+          date: new Date(item.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+          value: item.value,
+        }));
+
+        console.log('Real Data:', this.realData);
+
         // Initial update of the view
         this.updateForecastView();
 
@@ -262,7 +280,7 @@ export default {
         const monthlyArray = Object.entries(monthlyData)
           .map(([date, data]) => ({
             TANGGAL: date,
-            TOTAL_JUMLAH: (data.total / data.count).toFixed(2),
+            TOTAL_JUMLAH: data.total, // Use the summed value
           }))
           .sort((a, b) => a.TANGGAL.localeCompare(b.TANGGAL));
 
@@ -285,6 +303,8 @@ export default {
         });
       }
 
+      console.log('Chart Labels:', this.chartLabels);
+
       // Re-render the chart
       this.renderChart();
     },
@@ -293,18 +313,18 @@ export default {
       console.log('Rendering chart for row:', this.selectedRow);
       if (!this.selectedRow) return;
 
-      const canvasRef = `forecastCanvas-${this.selectedRow.id}`;
-      const canvasElement = this.$refs[canvasRef];
-      console.log('Canvas element:', canvasElement);
+      const forecastCanvasRef = `forecastCanvas-${this.selectedRow.id}`;
+      const forecastCanvasElement = this.$refs[forecastCanvasRef];
+      console.log('Forecast Canvas element:', forecastCanvasElement);
 
-      if (!canvasElement) {
-        console.error(`Canvas element with ref "${canvasRef}" not found`);
+      if (!forecastCanvasElement) {
+        console.error(`Forecast canvas element with ref "${forecastCanvasRef}" not found`);
         return;
       }
 
-      const ctx = canvasElement.getContext('2d');
-      if (!ctx) {
-        console.error('Context for canvas not found');
+      const forecastCtx = forecastCanvasElement.getContext('2d');
+      if (!forecastCtx) {
+        console.error('Context for forecast canvas not found');
         return;
       }
 
@@ -312,18 +332,35 @@ export default {
         this.chartInstance.destroy();
       }
 
-      this.chartInstance = new Chart(ctx, {
+      // Extract real data labels and values directly from the realData array
+      const realDataLabels = this.realData.map(item => item.date);
+      const realDataValues = this.realData.map(item => item.value);
+
+      console.log('Real Data Labels:', realDataLabels);
+      console.log('Real Data Values:', realDataValues);
+
+      this.chartInstance = new Chart(forecastCtx, {
         type: 'line',
         data: {
-          labels: this.chartLabels,
-          datasets: [{
-            label: this.forecastPeriod === 'year' ? 'Monthly Average' : 'Daily Value',
-            data: this.chartData,
-            borderColor: '#4CAF50',
-            backgroundColor: 'rgba(76, 175, 80, 0.2)',
-            fill: true,
-            tension: 0.4,
-          }],
+          labels: this.chartLabels, // Forecasted data labels
+          datasets: [
+            {
+              label: 'Forecasted Data',
+              data: this.chartData,
+              borderColor: '#4CAF50', // Green line
+              backgroundColor: 'rgba(76, 175, 80, 0.2)',
+              fill: true,
+              tension: 0.4,
+            },
+            {
+              label: 'Real Data',
+              data: realDataValues,
+              borderColor: '#2196F3', // Blue line
+              backgroundColor: 'rgba(33, 150, 243, 0.2)',
+              fill: false,
+              tension: 0.4,
+            },
+          ],
         },
         options: {
           responsive: true,
@@ -370,6 +407,43 @@ export default {
       } catch (err) {
         this.error = `Failed to download forecast: ${err.message}`
         console.error('Download error:', err)
+      }
+    },
+    
+    async fetchRealData(productId, startDate, endDate) {
+      try {
+        const response = await axios.get(`http://localhost:8000/train-data/${productId}`, {
+          params: {
+            start_date: startDate,
+            end_date: endDate,
+          },
+        });
+        console.log('Real data fetched:', response.data);
+
+        // Aggregate real data by summing the JUMLAH values for each unique date
+        const aggregatedData = {};
+        response.data.forEach(item => {
+          const date = item.TANGGAL;
+          const jumlah = parseFloat(item.JUMLAH || 0);
+
+          if (!aggregatedData[date]) {
+            aggregatedData[date] = 0;
+          }
+
+          aggregatedData[date] += jumlah; // Sum the JUMLAH values for the same date
+        });
+
+        // Convert aggregated data into an array
+        const realData = Object.entries(aggregatedData).map(([date, total]) => ({
+          date,
+          value: total, // Use the summed value
+        }));
+
+        console.log('Aggregated Real Data:', realData);
+        return realData;
+      } catch (err) {
+        console.error('Error fetching real data:', err);
+        return [];
       }
     },
     
