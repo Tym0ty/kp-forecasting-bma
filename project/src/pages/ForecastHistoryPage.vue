@@ -21,15 +21,28 @@
             <th>Start Date</th>
             <th>End Date</th>
             <th>Timestamp</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, idx) in history" :key="idx">
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] }}</td>
-            <td>{{ row[2] }}</td>
-            <td>{{ row[3] }}</td>
-            <td>{{ row[4] }}</td>
+          <tr v-for="row in history" :key="row.id">
+            <td>{{ row.id }}</td>
+            <td>{{ row.product_id }}</td>
+            <td>{{ formatDate(row.date_start) }}</td>
+            <td>{{ formatDate(row.date_end) }}</td>
+            <td>{{ formatDate(row.timestamp) }}</td>
+            <td>
+              <button 
+                class="download-button" 
+                @click="downloadForecast(row.csv_path)"
+                title="Download forecast data"
+              >
+                <svg class="download-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                </svg>
+                Download
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -55,16 +68,73 @@ export default {
     }
   },
   async mounted() {
-    this.loading = true
-    this.error = null
-    try {
-      const res = await axios.get('http://localhost:8000/forecast-history/')
-      this.history = res.data || []
-    } catch (err) {
-      this.error = 'Failed to load forecast history. Please try again.'
-      console.error(err)
-    } finally {
-      this.loading = false
+    await this.fetchHistory()
+  },
+  methods: {
+    async fetchHistory() {
+      this.loading = true
+      this.error = null
+      try {
+        const res = await axios.get('http://localhost:8000/forecast-history/')
+        // Make sure we get an array of objects with consistent properties
+        this.history = Array.isArray(res.data) ? 
+          res.data.map(item => {
+            // Handle both array and object responses
+            if (Array.isArray(item)) {
+              return {
+                id: item[0],
+                product_id: item[1],
+                date_start: item[2],
+                date_end: item[3],
+                csv_path: item[4],
+                timestamp: item[5] || new Date().toISOString()
+              }
+            }
+            return item
+          }) : []
+      } catch (err) {
+        this.error = 'Failed to load forecast history. Please try again.'
+        console.error(err)
+      } finally {
+        this.loading = false
+      }
+    },
+    
+    async downloadForecast(path) {
+      try {
+        // Extract filename from path
+        const filename = path.split('/').pop()
+        
+        // Call the download API endpoint
+        const response = await axios.get(`http://localhost:8000/download/${filename}`, {
+          responseType: 'blob'
+        })
+        
+        // Create download link and trigger download
+        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', filename)
+        document.body.appendChild(link)
+        link.click()
+        
+        // Clean up
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(link)
+      } catch (err) {
+        this.error = `Failed to download forecast: ${err.message}`
+        console.error('Download error:', err)
+      }
+    },
+    
+    formatDate(dateString) {
+      if (!dateString) return 'N/A'
+      try {
+        const date = new Date(dateString)
+        return date.toLocaleString()
+      } catch (e) {
+        return dateString
+      }
     }
   }
 }
@@ -136,6 +206,30 @@ export default {
 
 .data-table tr:hover {
   background-color: #eaeaea;
+}
+
+.download-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.download-button:hover {
+  background-color: #45a049;
+}
+
+.download-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
 }
 
 @keyframes spin {
