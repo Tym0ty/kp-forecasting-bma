@@ -60,25 +60,25 @@
           <tr v-if="selectedRow" class="forecast-details-row">
             <td colspan="6">
               <div class="forecast-controls">
-                <h3>Forecast and Real Data</h3>
+                <!-- View selectors here -->
                 <div class="view-selectors">
-                  <select v-model="forecastPeriod" class="forecast-period-select" @change="updateForecastView">
-                    <option value="year">Year View</option>
-                    <option value="month">Month View</option>
-                  </select>
-                  <select 
-                    v-if="forecastPeriod === 'month'" 
-                    v-model="selectedMonth" 
-                    class="month-select" 
-                    @change="updateForecastView"
-                  >
-                    <option v-for="month in months" :key="month.value" :value="month.value">
-                      {{ month.label }}
-                    </option>
-                  </select>
+                  <label>
+                    <select v-model="forecastPeriod" class="forecast-period-select" @change="updateForecastView">
+                      <option value="year">Year View (Monthly)</option>
+                      <option value="month">Month View (Daily)</option>
+                    </select>
+                  </label>
+                  <label v-if="forecastPeriod === 'month'">
+                    <select v-model="selectedMonth" class="month-select" @change="updateForecastView">
+                      <option v-for="month in months" :key="month.value" :value="month.value">
+                        {{ month.label }}
+                      </option>
+                    </select>
+                  </label>
                 </div>
+                <!-- Only one canvas for the joined chart -->
+                <canvas :ref="`forecastCanvas-${selectedRow.id}`" width="400" height="200"></canvas>
               </div>
-              <canvas :ref="`forecastCanvas-${selectedRow.id}`" width="400" height="200"></canvas>
             </td>
           </tr>
         </tbody>
@@ -112,7 +112,8 @@ export default {
       realData: [],
       chartData: [],
       chartLabels: [],
-      chartInstance: null,
+      forecastChartInstance: null,
+      realDataChartInstance: null,
       currentPage: 1,
       itemsPerPage: 10,
       forecastPeriod: 'year', // Default to Year View
@@ -131,6 +132,8 @@ export default {
         { value: '11', label: 'November' },
         { value: '12', label: 'December' },
       ],
+      dailyForecastByMonth: {}, // { '01': [dailyDataForJan], '02': [dailyDataForFeb], ... }
+      dailyRealByMonth: {}, // { '01': [dailyRealDataForJan], ... }
     };
   },
   computed: {
@@ -187,51 +190,50 @@ export default {
         this.selectedRow = null;
         this.forecastData = [];
         this.realData = [];
-        if (this.chartInstance) {
-          this.chartInstance.destroy();
-          this.chartInstance = null;
+        if (this.forecastChartInstance) {
+          this.forecastChartInstance.destroy();
+          this.forecastChartInstance = null;
+        }
+        if (this.realDataChartInstance) {
+          this.realDataChartInstance.destroy();
+          this.realDataChartInstance = null;
         }
         return;
       }
 
       this.selectedRow = row;
-      console.log('Selected row:', this.selectedRow);
       this.loadingForecast = true;
       this.forecastError = null;
-      this.currentPage = 1;
 
       try {
-        const filename = row.csv_path.split('/').pop();
-        const response = await axios.get(`http://localhost:8000/download/${filename}`, {
-          responseType: 'text',
-        });
-        console.log('CSV data fetched:', response.data);
+        const response = await axios.get(`http://localhost:8000/forecast-history/${row.id}`);
+        console.log('Forecast JSON fetched:', response.data);
 
-        // Parse CSV data
-        const csvData = response.data;
-        const lines = csvData.split('\n');
-        const headers = lines[0].split(',');
-
-        // Process CSV data into array of objects
-        this.originalData = [];
-        for (let i = 1; i < lines.length; i++) {
-          if (lines[i].trim() === '') continue;
-
-          const values = lines[i].split(',');
-          const entry = {};
-
-          for (let j = 0; j < headers.length; j++) {
-            entry[headers[j].trim()] = values[j] ? values[j].trim() : '';
-          }
-
-          this.originalData.push(entry);
+        // Use the response directly if it's an array of objects
+        let forecastArr = [];
+        if (Array.isArray(response.data)) {
+          forecastArr = response.data;
+        } else if (Array.isArray(response.data.forecast)) {
+          forecastArr = response.data.forecast;
+        } else {
+          forecastArr = [];
         }
+        console.log('Forecast array used for chart:', forecastArr);
+        this.originalData = forecastArr;
 
-        // Fetch real data
+        this.chartLabels = this.originalData.map(item => item.TANGGAL);
+        this.chartData = this.originalData.map(item => parseFloat(item.TOTAL_JUMLAH));
+        this.renderChart();
+
+        // Get start and end date from forecasted data
+        const forecastStart = this.originalData.length > 0 ? this.originalData[0].TANGGAL : row.date_start;
+        const forecastEnd = this.originalData.length > 0 ? this.originalData[this.originalData.length - 1].TANGGAL : row.date_end;
+
+        // Fetch real data using forecasted date range
         const realData = await this.fetchRealData(
           row.product_id,
-          row.date_start,
-          row.date_end
+          forecastStart,
+          forecastEnd
         );
 
         // Store real data
@@ -240,12 +242,21 @@ export default {
           value: item.value,
         }));
 
-        console.log('Real Data:', this.realData);
+        // Prepare daily real data by month for quick access in month view
+        this.dailyRealByMonth = {};
+        this.realData.forEach(item => {
+          const date = new Date(item.date);
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          if (!this.dailyRealByMonth[month]) {
+            this.dailyRealByMonth[month] = [];
+          }
+          this.dailyRealByMonth[month].push({
+            ...item,
+            day: date.getDate(),
+          });
+        });
 
-        // Initial update of the view
         this.updateForecastView();
-
-        // Wait for the DOM to update, then render the chart
         await nextTick();
         this.renderChart();
       } catch (err) {
@@ -259,20 +270,32 @@ export default {
     updateForecastView() {
       if (!this.originalData.length) return;
 
+      // Prepare daily forecast data by month for quick access in month view
+      this.dailyForecastByMonth = {};
+      this.originalData.forEach(item => {
+        const date = new Date(item.TANGGAL);
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        if (!this.dailyForecastByMonth[month]) {
+          this.dailyForecastByMonth[month] = [];
+        }
+        this.dailyForecastByMonth[month].push({
+          ...item,
+          day: date.getDate(),
+        });
+      });
+
       if (this.forecastPeriod === 'year') {
-        // Process monthly data for the chart
+        // Aggregate monthly
         const monthlyData = {};
         this.originalData.forEach(item => {
           const date = new Date(item.TANGGAL);
           const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
           if (!monthlyData[monthKey]) {
             monthlyData[monthKey] = {
               total: 0,
               count: 0,
             };
           }
-
           monthlyData[monthKey].total += parseFloat(item.TOTAL_JUMLAH || 0);
           monthlyData[monthKey].count += 1;
         });
@@ -280,7 +303,7 @@ export default {
         const monthlyArray = Object.entries(monthlyData)
           .map(([date, data]) => ({
             TANGGAL: date,
-            TOTAL_JUMLAH: data.total, // Use the summed value
+            TOTAL_JUMLAH: data.total,
           }))
           .sort((a, b) => a.TANGGAL.localeCompare(b.TANGGAL));
 
@@ -290,72 +313,115 @@ export default {
           return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
         });
       } else if (this.forecastPeriod === 'month') {
-        // Filter data for the selected month
-        const filteredData = this.originalData.filter(item => {
-          const date = new Date(item.TANGGAL);
-          return String(date.getMonth() + 1).padStart(2, '0') === this.selectedMonth;
-        });
-
-        this.chartData = filteredData.map(item => parseFloat(item.TOTAL_JUMLAH || 0));
-        this.chartLabels = filteredData.map(item => {
-          const date = new Date(item.TANGGAL);
-          return date.toLocaleDateString('en-US', { day: 'numeric' });
-        });
+        // Use daily data for selected month
+        const dailyData = this.dailyForecastByMonth[this.selectedMonth] || [];
+        this.chartData = dailyData.map(item => parseFloat(item.TOTAL_JUMLAH || 0));
+        this.chartLabels = dailyData.map(item => item.day.toString());
       }
 
       console.log('Chart Labels:', this.chartLabels);
+      console.log('Chart Data:', this.chartData);
 
       // Re-render the chart
       this.renderChart();
     },
 
     renderChart() {
-      console.log('Rendering chart for row:', this.selectedRow);
+      console.log('Rendering joined chart for row:', this.selectedRow);
       if (!this.selectedRow) return;
 
       const forecastCanvasRef = `forecastCanvas-${this.selectedRow.id}`;
       const forecastCanvasElement = this.$refs[forecastCanvasRef];
-      console.log('Forecast Canvas element:', forecastCanvasElement);
 
       if (!forecastCanvasElement) {
-        console.error(`Forecast canvas element with ref "${forecastCanvasRef}" not found`);
+        console.error('Canvas element not found');
         return;
       }
 
       const forecastCtx = forecastCanvasElement.getContext('2d');
       if (!forecastCtx) {
-        console.error('Context for forecast canvas not found');
+        console.error('Canvas context not found');
         return;
       }
 
-      if (this.chartInstance) {
-        this.chartInstance.destroy();
+      // Destroy existing chart instance if it exists
+      if (this.forecastChartInstance) {
+        this.forecastChartInstance.destroy();
       }
 
-      // Extract real data labels and values directly from the realData array
-      const realDataLabels = this.realData.map(item => item.date);
-      const realDataValues = this.realData.map(item => item.value);
+      // --- Prepare real data for the joined chart ---
+      let realDataLabels = [];
+      let realDataValues = [];
 
-      console.log('Real Data Labels:', realDataLabels);
-      console.log('Real Data Values:', realDataValues);
+      if (this.forecastPeriod === 'year') {
+        // Group real data by month
+        const monthlyRealData = {};
+        this.realData.forEach(item => {
+          const date = new Date(item.date);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          if (!monthlyRealData[monthKey]) {
+            monthlyRealData[monthKey] = 0;
+          }
+          monthlyRealData[monthKey] += item.value;
+        });
 
-      this.chartInstance = new Chart(forecastCtx, {
+        // Sort by month and prepare labels/values
+        const sortedMonths = Object.keys(monthlyRealData).sort();
+        realDataLabels = sortedMonths.map(monthKey => {
+          const [year, month] = monthKey.split('-');
+          return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+        });
+        realDataValues = sortedMonths.map(monthKey => monthlyRealData[monthKey]);
+      } else {
+        // Use daily real data for selected month
+        const dailyReal = this.dailyRealByMonth[this.selectedMonth] || [];
+        realDataLabels = dailyReal.map(item => item.day.toString());
+        realDataValues = dailyReal.map(item => item.value);
+      }
+
+      // --- Sync labels for both datasets ---
+      // Use forecast labels as the main x-axis
+      let labels = this.chartLabels;
+      let forecastData = this.chartData;
+
+      // Align real data to forecast labels (months or dates)
+      let realData = labels.map(label => {
+        // For 'year', label is a formatted month string, so match by formatted month
+        // For 'month', label is a date string, so match by date
+        let idx = -1;
+        if (this.forecastPeriod === 'year') {
+          idx = realDataLabels.findIndex(realLabel => realLabel === label);
+        } else {
+          idx = realDataLabels.findIndex(realLabel => realLabel === label);
+        }
+        // Use 0 if not found
+        return idx !== -1 ? realDataValues[idx] : 0;
+      });
+
+      // Now both forecastData and realData have the same length as labels
+
+      console.log('Labels:', labels);
+      console.log('Forecasted:', forecastData);
+      console.log('Real:', realData);
+
+      // Render joined chart
+      this.forecastChartInstance = new Chart(forecastCtx, {
         type: 'line',
         data: {
-          labels: this.chartLabels, // Forecasted data labels
+          labels: labels,
           datasets: [
             {
               label: 'Forecasted Data',
-              data: this.chartData,
-              borderColor: '#4CAF50', // Green line
+              data: forecastData,
+              borderColor: '#4CAF50',
               backgroundColor: 'rgba(76, 175, 80, 0.2)',
               fill: true,
               tension: 0.4,
             },
             {
               label: 'Real Data',
-              data: realDataValues,
-              borderColor: '#2196F3', // Blue line
+              data: realData,
+              borderColor: '#2196F3',
               backgroundColor: 'rgba(33, 150, 243, 0.2)',
               fill: false,
               tension: 0.4,
@@ -375,7 +441,7 @@ export default {
             y: {
               title: {
                 display: true,
-                text: this.forecastPeriod === 'year' ? 'Monthly Average' : 'Daily Value',
+                text: this.forecastPeriod === 'year' ? 'Monthly Total' : 'Daily Value',
               },
             },
           },
@@ -420,26 +486,13 @@ export default {
         });
         console.log('Real data fetched:', response.data);
 
-        // Aggregate real data by summing the JUMLAH values for each unique date
-        const aggregatedData = {};
-        response.data.forEach(item => {
-          const date = item.TANGGAL;
-          const jumlah = parseFloat(item.JUMLAH || 0);
-
-          if (!aggregatedData[date]) {
-            aggregatedData[date] = 0;
-          }
-
-          aggregatedData[date] += jumlah; // Sum the JUMLAH values for the same date
-        });
-
-        // Convert aggregated data into an array
-        const realData = Object.entries(aggregatedData).map(([date, total]) => ({
-          date,
-          value: total, // Use the summed value
+        // Map the API response to the required format
+        const realData = response.data.map(item => ({
+          date: item.TANGGAL, // Use the exact date from the API
+          value: parseFloat(item.JUMLAH || 0), // Use the exact JUMLAH value
         }));
 
-        console.log('Aggregated Real Data:', realData);
+        console.log('Processed Real Data:', realData);
         return realData;
       } catch (err) {
         console.error('Error fetching real data:', err);
