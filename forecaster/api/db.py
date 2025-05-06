@@ -185,13 +185,15 @@ def get_train_data_by_product_id(start_data: str, end_date:str, product_id: str)
     conn = get_connection()
     kode_barang, klasifikasi_barang, warna_barang, ukuran_barang = product_id.split("_")
     query = f"""
-    SELECT TANGGAL::TEXT as TANGGAL, JUMLAH
+    SELECT TANGGAL::TEXT as TANGGAL, SUM(JUMLAH) AS JUMLAH
     FROM {DUCKDB_TABLE}
     WHERE TANGGAL BETWEEN '{start_data}' AND '{end_date}'
       AND KODE_BARANG = '{kode_barang}'
       AND KLASIFIKASI_BARANG = '{klasifikasi_barang}'
       AND WARNA_BARANG = '{warna_barang}'
       AND UKURAN_BARANG = '{ukuran_barang}'
+    GROUP BY TANGGAL
+    ORDER BY TANGGAL
     """
     cursor = conn.execute(query)
     result = cursor.fetchall()
@@ -200,3 +202,38 @@ def get_train_data_by_product_id(start_data: str, end_date:str, product_id: str)
     conn.close()
     
     return [dict(zip(columns, row)) for row in result]
+
+def get_forecast_history_by_id(forecast_id: int):
+    """
+    Fetch forecast history by ID.
+
+    Args:
+        forecast_id (int): The ID of the forecast to fetch.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the forecast history.
+    """
+    conn = get_connection()
+    query = f"""
+    SELECT * FROM forecast_history
+    WHERE id = {forecast_id}
+    LIMIT 1
+    """
+    df = conn.execute(query).fetchdf()
+
+    csv_path = df['csv_path'].values[0]
+    df_forecast = pd.read_csv(csv_path)
+
+    # Convert the DataFrame to a list of dictionaries
+    df_forecast = df_forecast.to_dict(orient='records')
+
+    data = {
+        "product_id": df['product_id'].values[0],
+        "date_start": pd.to_datetime(df['date_start'].values[0]).strftime("%Y-%m-%d"),
+        "date_end": pd.to_datetime(df['date_end'].values[0]).strftime("%Y-%m-%d"),
+        "timestamp": pd.to_datetime(df['timestamp'].values[0]).strftime("%Y-%m-%d %H:%M:%S"),
+        "forecast": df_forecast
+    }
+
+    conn.close()
+    return data
