@@ -185,7 +185,7 @@ def get_train_data_by_product_id(start_data: str, end_date:str, product_id: str)
     conn = get_connection()
     kode_barang, klasifikasi_barang, warna_barang, ukuran_barang = product_id.split("_")
     query = f"""
-    SELECT TANGGAL::TEXT as TANGGAL, SUM(JUMLAH) AS JUMLAH
+    SELECT TANGGAL::TEXT as TANGGAL, SUM(BERAT_TOTAL) as JUMLAH
     FROM {DUCKDB_TABLE}
     WHERE TANGGAL BETWEEN '{start_data}' AND '{end_date}'
       AND KODE_BARANG = '{kode_barang}'
