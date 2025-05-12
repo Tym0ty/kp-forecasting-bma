@@ -31,7 +31,7 @@ async def store_forecast(payload: StoreForecast):
     try:
         append_forecast_results(payload.product_id, payload.results)
     except Exception as e:
-        print(f"error: {e}")
+        # Log error if needed, but don't print to stdout in production
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "ok"}
 
