@@ -98,7 +98,7 @@ import {
 } from 'chart.js';
 import { uploadCSV, checkTaskStatus, downloadFile } from '../services/api';
 
-// Register necessary components with Chart.js
+// Register Chart.js components
 Chart.register(
   LineController,
   LineElement,
@@ -116,8 +116,8 @@ export default {
     return {
       selectedFile: null,
       targetProductId: '',
-      originalData: [], // Store the complete original data
-      forecastData: [], // This will be the filtered view for the table
+      originalData: [],
+      forecastData: [],
       chartData: [],
       chartLabels: [],
       chartInstance: null,
@@ -162,13 +162,11 @@ export default {
         this.parsedTarget = null;
         return;
       }
-
       const parts = id.split('_');
       if (parts.length !== 4) {
         this.parsedTarget = null;
         return;
       }
-
       this.parsedTarget = {
         kodeBarang: parts[0],
         klasifikasiBarang: parts[1],
@@ -187,23 +185,18 @@ export default {
         this.error = 'Please select a file and enter a valid target product ID';
         return;
       }
-
       this.isProcessing = true;
       this.error = null;
 
       try {
         const response = await uploadCSV(this.selectedFile, this.targetProductId);
-        console.log('Upload response:', response); // Debug log
-        
         if (response && response.task_id) {
           this.taskId = response.task_id;
           this.startStatusCheck();
         } else {
-          console.error('Invalid response format:', response);
           throw new Error('Server response missing task ID');
         }
       } catch (error) {
-        console.error('Upload error details:', error);
         this.error = error.response?.data?.message || error.message || 'Error uploading file. Please try again.';
         this.isProcessing = false;
       }
@@ -218,10 +211,8 @@ export default {
 
     async checkStatus() {
       if (!this.taskId) return;
-
       try {
         const status = await checkTaskStatus(this.taskId);
-        
         if (status.output_file) {
           clearInterval(this.statusCheckInterval);
           await this.downloadAndProcessFile(status.output_file);
@@ -231,19 +222,16 @@ export default {
           this.error = 'Processing failed: ' + status.error;
           this.isProcessing = false;
         }
-        // Continue polling if no filename or error is received
       } catch (error) {
-        // Don't clear interval on network errors, keep trying
         this.error = 'Error checking status. Retrying...';
-        console.error('Status check error:', error);
       }
     },
 
     async loadSavedData() {
-      // First try to load from localStorage
+      // Try to load from localStorage
       const cachedData = localStorage.getItem('forecastData');
       const cachedTimestamp = localStorage.getItem('forecastDataTimestamp');
-      const cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+      const cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours
 
       if (cachedData && cachedTimestamp) {
         const timestamp = parseInt(cachedTimestamp);
@@ -253,7 +241,7 @@ export default {
             this.updateForecastView();
             return;
           } catch (e) {
-            console.error('Error parsing cached data:', e);
+            // Ignore parse error, fallback to server
           }
         }
       }
@@ -266,12 +254,11 @@ export default {
           if (data && data.length > 0) {
             this.originalData = data;
             this.updateForecastView();
-            // Update cache
             this.updateCache(data);
           }
         }
       } catch (error) {
-        console.error('Error loading recent data:', error);
+        // Ignore error, just don't load data
       }
     },
 
@@ -280,7 +267,7 @@ export default {
         localStorage.setItem('forecastData', JSON.stringify(data));
         localStorage.setItem('forecastDataTimestamp', Date.now().toString());
       } catch (e) {
-        console.error('Error caching data:', e);
+        // Ignore cache error
       }
     },
 
@@ -288,7 +275,6 @@ export default {
       try {
         const blob = await downloadFile(filename);
         const reader = new FileReader();
-        
         reader.onload = (e) => {
           const text = e.target.result;
           const rows = text.split('\n').map(row => row.split(','));
@@ -300,13 +286,11 @@ export default {
             });
             return obj;
           });
-
           this.originalData = data;
-          this.updateCache(data); // Cache the new data
+          this.updateCache(data);
           this.updateForecastView();
           this.isProcessing = false;
         };
-
         reader.readAsText(blob);
       } catch (error) {
         this.error = 'Error processing downloaded file. Please try again.';
@@ -326,7 +310,6 @@ export default {
       } else if (this.forecastPeriod === 'month') {
         this.forecastData = this.originalData.slice(0, 30);
       } else {
-        // For year view, show all data in the table
         this.forecastData = this.originalData;
       }
 
@@ -337,14 +320,9 @@ export default {
         this.originalData.forEach(item => {
           const date = new Date(item.TANGGAL);
           const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          
           if (!monthlyData[monthKey]) {
-            monthlyData[monthKey] = {
-              total: 0,
-              count: 0
-            };
+            monthlyData[monthKey] = { total: 0, count: 0 };
           }
-          
           monthlyData[monthKey].total += parseFloat(item.TOTAL_JUMLAH);
           monthlyData[monthKey].count += 1;
         });
@@ -363,8 +341,8 @@ export default {
         });
       } else {
         // For week and month views, show daily data in the chart
-        const filteredData = this.forecastPeriod === 'week' 
-          ? this.originalData.slice(0, 7) 
+        const filteredData = this.forecastPeriod === 'week'
+          ? this.originalData.slice(0, 7)
           : this.originalData.slice(0, 30);
 
         this.chartData = filteredData.map(item => parseFloat(item.TOTAL_JUMLAH));
@@ -381,11 +359,9 @@ export default {
 
     renderChart() {
       const ctx = document.getElementById('forecastChart').getContext('2d');
-
       if (this.chartInstance) {
         this.chartInstance.destroy();
       }
-
       this.chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -427,264 +403,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.container {
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
-  background-color: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.header h1 {
-  font-size: 2.5rem;
-  color: #333;
-  margin-bottom: 0.5rem;
-}
-
-.header p {
-  color: #666;
-  font-size: 1.1rem;
-  margin: 0;
-}
-
-.file-upload {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-.file-input {
-  width: 0.1px;
-  height: 0.1px;
-  opacity: 0;
-  overflow: hidden;
-  position: absolute;
-  z-index: -1;
-}
-
-.file-input-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1rem;
-  width: 100%;
-  max-width: 400px;
-  font-size: 1rem;
-  font-weight: 500;
-  color: #fff;
-  background-color: #4CAF50;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.file-input-label:hover {
-  background-color: #45a049;
-}
-
-.file-name {
-  font-size: 0.9rem;
-  opacity: 0.9;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.target-inputs {
-  width: 100%;
-  max-width: 400px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.product-input,
-.forecast-period-select {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background-color: white;
-  transition: border-color 0.2s;
-}
-
-.product-input:focus,
-.forecast-period-select:focus {
-  outline: none;
-  border-color: #4CAF50;
-}
-
-.target-details {
-  padding: 1rem;
-  background-color: #f5f5f5;
-  border-radius: 6px;
-  text-align: left;
-}
-
-.target-details p {
-  margin: 0.5rem 0;
-  color: #333;
-}
-
-.upload-button {
-  display: inline-block;
-  width: 100%;
-  max-width: 400px;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  font-weight: 500;
-  color: #fff;
-  background-color: #4CAF50;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.upload-button:hover:not(:disabled) {
-  background-color: #45a049;
-}
-
-.upload-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-.result {
-  margin-top: 40px;
-  padding: 20px;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-}
-
-.data-table {
-  width: 100%;
-  margin: 20px auto;
-  border-collapse: collapse;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.data-table th, .data-table td {
-  padding: 15px;
-  text-align: center;
-  border-bottom: 1px solid #ddd;
-  color: #333;
-}
-
-.data-table th {
-  background-color: #4CAF50;
-  color: white;
-  font-size: 1.1rem;
-}
-
-.data-table tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-.data-table tr:hover {
-  background-color: #f1f1f1;
-}
-
-.pagination-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 20px 0;
-  padding: 15px;
-  background-color: #f5f5f5;
-  border-radius: 8px;
-}
-
-.page-size-select {
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background-color: white;
-}
-
-.pagination-buttons {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.pagination-button {
-  padding: 10px 20px;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.pagination-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-.pagination-button:hover:not(:disabled) {
-  background-color: #45a049;
-}
-
-.page-info {
-  color: #333;
-  font-size: 1rem;
-}
-
-.loading {
-  margin: 30px 0;
-  text-align: center;
-}
-
-.spinner {
-  width: 50px;
-  height: 50px;
-  margin: 20px auto;
-  border: 5px solid #f3f3f3;
-  border-top: 5px solid #4CAF50;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.error {
-  color: #ff0000;
-  margin: 20px 0;
-  padding: 15px;
-  background-color: #ffebee;
-  border-radius: 8px;
-  text-align: center;
-}
-
-canvas {
-  width: 100% !important;
-  max-width: 1000px;
-  margin: 30px auto;
-  background-color: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-</style>

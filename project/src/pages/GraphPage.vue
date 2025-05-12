@@ -109,7 +109,7 @@ import {
   Legend
 } from 'chart.js';
 
-// Register necessary components with Chart.js
+// Register Chart.js components
 Chart.register(
   LineController,
   LineElement,
@@ -207,7 +207,6 @@ export default {
         this.updateForecastView();
       } catch (error) {
         this.error = 'Error fetching forecast data. Please try again.';
-        console.error('Fetch error:', error);
       } finally {
         this.loading = false;
       }
@@ -218,7 +217,7 @@ export default {
         localStorage.setItem('forecastData', JSON.stringify(data));
         localStorage.setItem('forecastDataTimestamp', Date.now().toString());
       } catch (e) {
-        console.error('Error caching data:', e);
+        // Ignore cache error
       }
     },
 
@@ -330,211 +329,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.graph-page {
-  padding: 2rem;
-}
-
-.input-section {
-  margin-bottom: 2rem;
-  background-color: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.product-input-container {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.product-input {
-  flex: 1;
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background-color: white;
-}
-
-.date-picker {
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background-color: white;
-}
-
-.fetch-button {
-  padding: 0.75rem 1.5rem;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s;
-}
-
-.fetch-button:hover:not(:disabled) {
-  background-color: #45a049;
-}
-
-.fetch-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-.target-details {
-  padding: 1rem;
-  background-color: #f5f5f5;
-  border-radius: 6px;
-}
-
-.target-details p {
-  margin: 0.5rem 0;
-  color: #333;
-}
-
-.graph-container {
-  background-color: white;
-  border-radius: 8px;
-  padding: 1rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  min-height: 400px;
-}
-
-.loading, .error {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 400px;
-  font-size: 1.2rem;
-}
-
-.error {
-  color: #e74c3c;
-}
-
-.result {
-  margin-top: 40px;
-  padding: 20px;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-}
-
-.forecast-period-select {
-  width: 100%;
-  max-width: 200px;
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background-color: white;
-  margin-bottom: 1rem;
-}
-
-.data-table {
-  width: 100%;
-  margin: 20px auto;
-  border-collapse: collapse;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.data-table th, .data-table td {
-  padding: 15px;
-  text-align: center;
-  border-bottom: 1px solid #ddd;
-  color: #333;
-}
-
-.data-table th {
-  background-color: #4CAF50;
-  color: white;
-  font-size: 1.1rem;
-}
-
-.data-table tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-.data-table tr:hover {
-  background-color: #f1f1f1;
-}
-
-.pagination-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 20px 0;
-  padding: 15px;
-  background-color: #f5f5f5;
-  border-radius: 8px;
-}
-
-.page-size-select {
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background-color: white;
-}
-
-.pagination-buttons {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.pagination-button {
-  padding: 10px 20px;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.pagination-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-.pagination-button:hover:not(:disabled) {
-  background-color: #45a049;
-}
-
-.page-info {
-  color: #333;
-  font-size: 1rem;
-}
-
-.spinner {
-  width: 50px;
-  height: 50px;
-  margin: 20px auto;
-  border: 5px solid #f3f3f3;
-  border-top: 5px solid #4CAF50;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-canvas {
-  width: 100% !important;
-  max-width: 1000px;
-  margin: 30px auto;
-  background-color: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-</style>
