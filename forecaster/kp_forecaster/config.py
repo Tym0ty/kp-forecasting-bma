@@ -4,7 +4,7 @@ DATE_COLUMN = 'TANGGAL'
 RESAMPLE_FREQ = 'D'
 
 N_LAGS = 30
-N_WEEKS = 4
+N_WEEKS = 54
 ROLL_WINDOWS = [7, 30]
 
 N_SPLITS_BMA = 5 # Number of folds for cross-validation

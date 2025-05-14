@@ -35,7 +35,7 @@ def add_time_features(df):
     df['weekofyear'] = df.index.isocalendar().week
     return df
 
-def add_lag_features(df, n_lags=30, n_weeks=4):
+def add_lag_features(df, n_lags=30, n_weeks=54):
     for i in range(1, n_lags + 1):
         df[f'lag_{i}'] = df['TOTAL_JUMLAH'].shift(i)
     for i in range(1, n_weeks + 1):
@@ -62,8 +62,8 @@ def create_features_for_step(date, extended_series, feature_columns, config):
     """
     features = {}
     n_lags = config.get('N_LAGS', 4)
-    n_weeks = config.get('N_WEEKS', 1) # Should match training
-    roll_windows = config.get('ROLL_WINDOWS', [4, 8])
+    n_weeks = config.get('N_WEEKS', 54) # Should match training
+    roll_windows = config.get('ROLL_WINDOWS', [7, 30])
 
     # --- Calculate features based on extended_series ---
 
