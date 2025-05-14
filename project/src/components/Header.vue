@@ -7,6 +7,7 @@
         <router-link to="/upload" class="nav-link">Upload</router-link>
         <router-link to="/forecast" class="nav-link">Forecast</router-link>
         <router-link to="/forecast-history" class="nav-link">History</router-link>
+        <router-link to="/train-data" class="nav-link">Train Data</router-link>
       </nav>
     </div>
   </header>

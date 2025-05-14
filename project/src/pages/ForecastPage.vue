@@ -11,9 +11,23 @@
         class="product-input"
         placeholder="MP000294_KD000016_PL000037_SZ000012"
       />
+      <label for="start-date">Start Date</label>
+      <input
+        id="start-date"
+        type="date"
+        v-model="startDate"
+        class="product-input"
+      />
+      <label for="end-date">End Date</label>
+      <input
+        id="end-date"
+        type="date"
+        v-model="endDate"
+        class="product-input"
+      />
       <button
         class="fetch-button"
-        :disabled="!targetProduct || loading"
+        :disabled="!targetProduct || !startDate || !endDate || loading"
         @click="startForecast"
       >
         {{ loading ? 'Starting...' : 'Start Forecast' }}
@@ -51,6 +65,8 @@ export default {
   data() {
     return {
       targetProduct: '',
+      startDate: '',      // Add this
+      endDate: '',        // Add this
       loading: false,         // for initial POST
       loadingStatus: false,   // for polling spinner
       statusMessage: '',
@@ -80,7 +96,13 @@ export default {
         const res = await axios.post(
           `http://localhost:8000/process-csv/`,
           null,
-          { params: { target_product_id: this.targetProduct } }
+          {
+            params: {
+              target_product_id: this.targetProduct,
+              start_date: this.startDate,
+              end_date: this.endDate
+            }
+          }
         )
         this.taskId = res.data.task_id
         this.loading = false

@@ -25,6 +25,11 @@ const routes = [
     path: '/forecast',
     name: 'Forecast',
     component: () => import('../pages/ForecastPage.vue')
+  },
+  {
+    path: '/train-data',
+    name: 'TrainData',
+    component: () => import('../pages/TrainDataPage.vue')
   }
 ]
 
