@@ -15,10 +15,25 @@
         placeholder="Search in all columns..."
         @input="resetPage"
       />
-      <select v-model="filterColumn" class="filter-select" @change="resetPage">
-        <option value="">All Columns</option>
-        <option v-for="col in columns" :key="col" :value="col">{{ col }}</option>
-      </select>
+      <div class="addable-filters">
+        <div v-for="(filter, idx) in addableFilters" :key="idx" class="addable-filter-row">
+          <select v-model="filter.column" class="addable-filter-select" @change="resetPage">
+            <option value="" disabled>Select column</option>
+            <option v-for="col in columns" :key="col" :value="col">{{ col }}</option>
+          </select>
+          <input
+            v-model="filter.value"
+            class="addable-filter-input"
+            type="text"
+            placeholder="Value"
+            @input="resetPage"
+          />
+          <button class="remove-filter-btn" @click="removeFilter(idx)" title="Remove filter">&times;</button>
+        </div>
+        <button class="add-filter-btn" @click="addFilter" :disabled="columns.length === 0">
+          + Add Filter
+        </button>
+      </div>
     </div>
     <div v-if="error" class="error">{{ error }}</div>
     <div v-if="loading" class="loading">
@@ -80,26 +95,39 @@ export default {
       maxRows: 2000,
       maxRowsReached: false,
       search: '',
-      filterColumn: ''
+      addableFilters: []
     }
   },
   computed: {
     filteredData() {
-      if (!this.search) return this.data;
+      let result = this.data;
+      for (const filter of this.addableFilters) {
+        if (filter.column && filter.value) {
+          const val = filter.value.trim().toLowerCase();
+          result = result.filter(row =>
+            String(row[filter.column]).toLowerCase().includes(val)
+          );
+        }
+      }
+      if (!this.search) return result;
       const searchLower = this.search.toLowerCase();
-      if (this.filterColumn && this.columns.includes(this.filterColumn)) {
-        // Filter only on selected column
-        return this.data.filter(row =>
-          String(row[this.filterColumn]).toLowerCase().includes(searchLower)
-        );
-      } else {
-        // Filter on all columns
-        return this.data.filter(row =>
-          this.columns.some(col =>
-            String(row[col]).toLowerCase().includes(searchLower)
-          )
+      const columnsToSearch = this.columns;
+      const advanced = this.search.match(/(\w+):([^ ]+)/g);
+      if (advanced) {
+        return result.filter(row =>
+          advanced.every(term => {
+            const [col, ...valArr] = term.split(':');
+            const val = valArr.join(':').toLowerCase();
+            if (!this.columns.includes(col)) return false;
+            return String(row[col]).toLowerCase().includes(val);
+          })
         );
       }
+      return result.filter(row =>
+        columnsToSearch.some(col =>
+          String(row[col]).toLowerCase().includes(searchLower)
+        )
+      );
     },
     totalPages() {
       return Math.ceil(this.filteredData.length / this.itemsPerPage);
@@ -110,6 +138,13 @@ export default {
     }
   },
   methods: {
+    addFilter() {
+      this.addableFilters.push({ column: '', value: '' });
+    },
+    removeFilter(idx) {
+      this.addableFilters.splice(idx, 1);
+      this.resetPage();
+    },
     prevPage() {
       if (this.currentPage > 1) this.currentPage--;
     },
@@ -171,8 +206,6 @@ export default {
         });
         if (!response.ok) throw new Error('Failed to fetch train data');
         const csvText = await response.text();
-
-        // Only parse the first maxRows rows to avoid memory issues
         const rows = this.parseCSV(csvText.trim(), this.maxRows);
         if (rows.length < 2) {
           this.data = [];
@@ -183,12 +216,10 @@ export default {
           this.data = rows.slice(1).map(row => {
             const obj = {};
             headers.forEach((header, idx) => {
-              // Fill null/empty with NaN
               obj[header] = (row[idx] === undefined || row[idx] === null || row[idx] === '') ? 'NaN' : row[idx];
             });
             return obj;
           });
-          // If we hit the maxRows limit, show a warning
           if (rows.length - 1 >= this.maxRows) {
             this.maxRowsReached = true;
           }
@@ -261,13 +292,6 @@ export default {
   font-size: 1rem;
   background: #f9f9f9;
 }
-.filter-select {
-  padding: 0.6rem 1rem;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  font-size: 1rem;
-  background: #f9f9f9;
-}
 .result {
   background: #fff;
   padding: 1.5rem;
@@ -280,7 +304,7 @@ export default {
 }
 .data-table {
   width: 100%;
-  min-width: 700px;
+  min-width: 1400px;
   border-collapse: collapse;
   margin-top: 0.5rem;
   background: #fff;
@@ -368,5 +392,66 @@ select {
   border: 1px solid #ddd;
   font-size: 1rem;
   background: #f9f9f9;
+}
+.addable-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-left: 2rem;
+}
+.addable-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.addable-filter-select {
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  font-size: 0.97rem;
+  background: #f9f9f9;
+}
+.addable-filter-input {
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  font-size: 0.97rem;
+  background: #f9f9f9;
+  min-width: 80px;
+}
+.add-filter-btn {
+  padding: 0.3rem 0.9rem;
+  border-radius: 4px;
+  border: 1px solid #4CAF50;
+  background: #e8f5e9;
+  color: #388e3c;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: background 0.2s;
+}
+.add-filter-btn:disabled {
+  background: #eee;
+  color: #aaa;
+  border-color: #ccc;
+  cursor: not-allowed;
+}
+.remove-filter-btn {
+  background: #e57373;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 1.7em;
+  height: 1.7em;
+  font-size: 1.1em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.2rem;
+  transition: background 0.2s;
+}
+.remove-filter-btn:hover {
+  background: #c62828;
 }
 </style>
