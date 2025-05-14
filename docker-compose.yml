@@ -22,3 +22,13 @@ services:
       - ./forecaster:/app
       - ./forecaster/log:/var/log
     restart: always
+
+  fe:
+    build:
+      context: ./project
+      dockerfile: Dockerfile
+    container_name: "my-fe"
+    network_mode: "host"
+    depends_on:
+      - app
+    restart: always

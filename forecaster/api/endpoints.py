@@ -75,8 +75,8 @@ async def process_csv(
         df["TANGGAL"] = pd.to_datetime(df["TANGGAL"])  # Ensure TANGGAL is in datetime format
         
         # Create date range from a fixed start or earliest available date
-        fill_start = pd.to_datetime("2023-01-01")  # or df["TANGGAL"].min() if you prefer dynamic
-        fill_end = pd.to_datetime(start_date) - timedelta(days=1)
+        fill_start = df["TANGGAL"].min()
+        fill_end = pd.to_datetime(start_date) + timedelta(days=1)
         
         if fill_start <= fill_end:
             date_range = pd.date_range(start=fill_start, end=fill_end, freq="D")
@@ -86,7 +86,7 @@ async def process_csv(
             })
 
             # Filter the original df to only before start_date (optional)
-            df = df[df["TANGGAL"] < pd.to_datetime(start_date)]
+            df = df[df["TANGGAL"] <= pd.to_datetime(start_date)]
 
             # Combine
             df = pd.concat([fill_df, df], ignore_index=True)
