@@ -72,6 +72,16 @@ def validate_and_append_to_db(file_path: str):
     conn.execute(f"INSERT INTO {DUCKDB_TABLE} SELECT * FROM temp_upload")
     conn.close()  # Close the connection
 
+def get_all_data():
+    """
+    Fetch all data from the DuckDB table.
+    """
+    conn = get_connection()  # Create a new connection
+    query = f"SELECT * FROM {DUCKDB_TABLE} ORDER BY TANGGAL"
+    df = conn.execute(query).fetchdf()
+    conn.close()  # Close the connection
+    return df
+
 def get_data(target_product_id: str):
     """
     Fetch data for the specified product ID from the DuckDB table.

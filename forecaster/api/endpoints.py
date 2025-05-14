@@ -1,11 +1,12 @@
 from fastapi import APIRouter, UploadFile, Form, HTTPException
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from .tasks import process_csv_task
-from .db import validate_and_append_to_db, get_data, append_forecast_results, get_history_forecast, get_train_data_by_product_id, get_forecast_history_by_id
+from .db import validate_and_append_to_db, get_data, append_forecast_results, get_history_forecast, get_train_data_by_product_id, get_forecast_history_by_id, get_all_data
 import os
-from datetime import date
+from datetime import date, timedelta
 from pydantic import BaseModel
 import pandas as pd
+from io import StringIO
 
 # Directory to save uploaded and processed files
 UPLOAD_DIR = "uploads"
@@ -72,10 +73,26 @@ async def process_csv(
 
     if start_date and end_date:
         df["TANGGAL"] = pd.to_datetime(df["TANGGAL"])  # Ensure TANGGAL is in datetime format
-        df = df[(df["TANGGAL"] < pd.to_datetime(start_date))]
+        
+        # Create date range from a fixed start or earliest available date
+        fill_start = pd.to_datetime("2023-01-01")  # or df["TANGGAL"].min() if you prefer dynamic
+        fill_end = pd.to_datetime(start_date) - timedelta(days=1)
+        
+        if fill_start <= fill_end:
+            date_range = pd.date_range(start=fill_start, end=fill_end, freq="D")
+            fill_df = pd.DataFrame({
+                "TANGGAL": date_range,
+                "BERAT_TOTAL": 0  # You can add more columns with 0s or defaults as needed
+            })
 
-    if df.empty:
-        raise HTTPException(status_code=404, detail="No data found for the specified product ID.")
+            # Filter the original df to only before start_date (optional)
+            df = df[df["TANGGAL"] < pd.to_datetime(start_date)]
+
+            # Combine
+            df = pd.concat([fill_df, df], ignore_index=True)
+
+        if df.empty:
+            raise HTTPException(status_code=404, detail="No data found for the specified product ID.")
     
     file_path = os.path.join(UPLOAD_DIR, "train.csv")
     df.to_csv(file_path, index=False)
@@ -185,6 +202,27 @@ async def get_forecast_by_id(forecast_id: int):
         data = get_forecast_history_by_id(forecast_id)
 
         return JSONResponse(data)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/all-train-data")
+async def get_all_train_data():
+    """
+    Endpoint to get all train data.
+    Stream as CSV for better performance.
+    """
+    try:
+        df = get_all_data()
+
+        def iter_csv():
+            yield df.to_csv(index=False)
+
+        return StreamingResponse(
+            iter_csv(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=train_data.csv"}
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
