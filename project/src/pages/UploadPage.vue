@@ -137,24 +137,22 @@ export default {
           const processed = jsonData.map(row => {
             // Parse TANGGAL
             let tanggal = row['TANGGAL'];
-            let dateObj;
+            // let dateObj; // Remove unused variable
             if (typeof tanggal === 'string') {
               // Try to parse with format MM/DD/YYYY HH:mm:ss
               const [datePart, timePart] = tanggal.split(' ');
               const [month, day, year] = datePart.split('/');
               const [hour = 0, minute = 0, second = 0] = (timePart || '0:0:0').split(':');
-              dateObj = new Date(
-                Number(year), Number(month) - 1, Number(day),
-                Number(hour), Number(minute), Number(second)
-              );
+              // const dateObj = new Date( // Remove unused variable
+              //   Number(year), Number(month) - 1, Number(day),
+              //   Number(hour), Number(minute), Number(second)
+              // );
+              // No need to assign dateObj since it's not used
             } else if (tanggal instanceof Date) {
-              dateObj = tanggal;
+              // const dateObj = tanggal; // Remove unused variable
             } else {
-              dateObj = new Date(tanggal);
+              // const dateObj = new Date(tanggal); // Remove unused variable
             }
-
-            // Calculate MATCH (not used, just for logic parity)
-            // const match = (dateObj.getMonth() + 1 === Number(row['BULAN'])) && (dateObj.getFullYear() === Number(row['TAHUN']));
 
             // Remove MATCH, BULAN, TAHUN columns
             // eslint-disable-next-line no-unused-vars
