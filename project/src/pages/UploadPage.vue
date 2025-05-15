@@ -114,7 +114,7 @@ export default {
 
     async processFile(file) {
       // Returns processed CSV string
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           let data, ws, jsonData;
@@ -153,13 +153,12 @@ export default {
               dateObj = new Date(tanggal);
             }
 
-            // Calculate MATCH
-            const bulan = Number(row['BULAN']);
-            const tahun = Number(row['TAHUN']);
-            const match = (dateObj.getMonth() + 1 === bulan) && (dateObj.getFullYear() === tahun);
+            // Calculate MATCH (not used, just for logic parity)
+            // const match = (dateObj.getMonth() + 1 === Number(row['BULAN'])) && (dateObj.getFullYear() === Number(row['TAHUN']));
 
             // Remove MATCH, BULAN, TAHUN columns
-            const { MATCH, BULAN, TAHUN, ...rest } = row;
+            // eslint-disable-next-line no-unused-vars
+            const { MATCH: _MATCH, BULAN: _BULAN, TAHUN: _TAHUN, ...rest } = row;
             return rest;
           });
 
