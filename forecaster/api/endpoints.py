@@ -1,7 +1,11 @@
 from fastapi import APIRouter, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from .tasks import process_csv_task
-from .db import validate_and_append_to_db, get_data, append_forecast_results, get_history_forecast, get_train_data_by_product_id, get_forecast_history_by_id, get_all_data
+from .db import (
+    validate_and_append_to_db, get_data, append_forecast_results, get_history_forecast,
+    get_train_data_by_product_id, get_forecast_history_by_id, get_all_data,
+    preprocess_uploaded_file  # <-- import the new function
+)
 import os
 from datetime import date, timedelta
 from pydantic import BaseModel
@@ -47,9 +51,15 @@ async def upload_train_csv(
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
+    # Preprocess the uploaded file (Excel/CSV) before validation/append
+    try:
+        processed_path = preprocess_uploaded_file(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Preprocessing failed: {e}")
+
     # Validate and append data to DuckDB
     try:
-        validate_and_append_to_db(file_path)
+        validate_and_append_to_db(processed_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

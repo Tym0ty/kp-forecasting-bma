@@ -72,6 +72,41 @@ def validate_and_append_to_db(file_path: str):
     conn.execute(f"INSERT INTO {DUCKDB_TABLE} SELECT * FROM temp_upload")
     conn.close()  # Close the connection
 
+def preprocess_uploaded_file(file_path: str) -> str:
+    """
+    Preprocess the uploaded Excel or CSV file:
+    - Reads .xls/.xlsx/.csv
+    - Converts TANGGAL to datetime
+    - Drops MATCH, BULAN, TAHUN columns if present
+    - Returns path to processed CSV file
+    """
+    import pandas as pd
+    import os
+
+    ext = os.path.splitext(file_path)[-1].lower()
+    if ext in [".xls", ".xlsx"]:
+        df = pd.read_excel(file_path)
+    elif ext == ".csv":
+        df = pd.read_csv(file_path)
+    else:
+        raise ValueError("Unsupported file type for preprocessing.")
+
+    # Try to parse TANGGAL with the expected format, fallback to auto
+    try:
+        df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], format='%m/%d/%Y %H:%M:%S')
+    except Exception:
+        df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], errors='coerce')
+
+    # Drop MATCH, BULAN, TAHUN if present
+    for col in ['MATCH', 'BULAN', 'TAHUN']:
+        if col in df.columns:
+            df = df.drop(columns=[col])
+
+    # Save to a new processed CSV file
+    processed_path = file_path.rsplit('.', 1)[0] + "_processed.csv"
+    df.to_csv(processed_path, index=False)
+    return processed_path
+
 def get_all_data():
     """
     Fetch all data from the DuckDB table.

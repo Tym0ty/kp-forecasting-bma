@@ -40,8 +40,6 @@
 </template>
 
 <script>
-import * as XLSX from 'xlsx';
-
 export default {
   name: 'UploadPage',
   data() {
@@ -88,12 +86,9 @@ export default {
       this.error = null;
 
       try {
-        // Read and process file before upload
-        const processedCsv = await this.processFile(this.selectedFile);
-
-        // Send processed CSV as a Blob
+        // Send file as-is to backend, backend will process
         const formData = new FormData();
-        formData.append('file', new Blob([processedCsv], { type: 'text/csv' }), 'processed.csv');
+        formData.append('file', this.selectedFile);
 
         const response = await fetch('http://localhost:8000/upload/', {
           method: 'POST',
@@ -110,68 +105,6 @@ export default {
       } finally {
         this.uploading = false;
       }
-    },
-
-    async processFile(file) {
-      // Returns processed CSV string
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          let data, ws, jsonData;
-          const ext = file.name.split('.').pop().toLowerCase();
-          if (ext === 'csv') {
-            // Parse CSV
-            data = e.target.result;
-            ws = XLSX.read(data, { type: 'string' }).Sheets;
-            const sheetName = Object.keys(ws)[0];
-            jsonData = XLSX.utils.sheet_to_json(ws[sheetName]);
-          } else {
-            // Parse Excel
-            data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheetName = workbook.SheetNames[0];
-            jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-          }
-
-          // Process data
-          const processed = jsonData.map(row => {
-            // Parse TANGGAL
-            let tanggal = row['TANGGAL'];
-            // let dateObj; // Remove unused variable
-            if (typeof tanggal === 'string') {
-              // Try to parse with format MM/DD/YYYY HH:mm:ss
-              const [datePart, timePart] = tanggal.split(' ');
-              const [month, day, year] = datePart.split('/');
-              const [hour = 0, minute = 0, second = 0] = (timePart || '0:0:0').split(':');
-              // const dateObj = new Date( // Remove unused variable
-              //   Number(year), Number(month) - 1, Number(day),
-              //   Number(hour), Number(minute), Number(second)
-              // );
-              // No need to assign dateObj since it's not used
-            } else if (tanggal instanceof Date) {
-              // const dateObj = tanggal; // Remove unused variable
-            } else {
-              // const dateObj = new Date(tanggal); // Remove unused variable
-            }
-
-            // Remove MATCH, BULAN, TAHUN columns
-            // eslint-disable-next-line no-unused-vars
-            const { MATCH: _MATCH, BULAN: _BULAN, TAHUN: _TAHUN, ...rest } = row;
-            return rest;
-          });
-
-          // Convert to CSV
-          const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(processed));
-          resolve(csv);
-        };
-
-        const ext = file.name.split('.').pop().toLowerCase();
-        if (ext === 'csv') {
-          reader.readAsText(file);
-        } else {
-          reader.readAsArrayBuffer(file);
-        }
-      });
     }
   }
 }
