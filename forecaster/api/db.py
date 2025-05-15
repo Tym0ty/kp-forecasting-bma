@@ -4,6 +4,8 @@ from typing import List
 import os
 import pandas as pd
 
+from fastapi.middleware.cors import CORSMiddleware  # <-- Add this import
+
 os.makedirs("data", exist_ok=True)
 DUCKDB_FILE = "data/train.duckdb"
 DUCKDB_TABLE = "train_data"
@@ -282,3 +284,16 @@ def get_forecast_history_by_id(forecast_id: int):
 
     conn.close()
     return data
+
+# If you have a FastAPI app instance, add CORS middleware setup here.
+# Example (add this to your FastAPI main.py or where your app is created):
+
+# from fastapi import FastAPI
+# app = FastAPI()
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # Or specify allowed origins
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
