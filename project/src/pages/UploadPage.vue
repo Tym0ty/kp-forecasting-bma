@@ -96,12 +96,13 @@ export default {
         });
 
         if (!response.ok) {
-          throw new Error('Upload failed');
+          const errorResponse = await response.json();
+          throw new Error(`${errorResponse.detail}`);
         }
 
         this.$router.push('/');
       } catch (err) {
-        this.error = 'Failed to upload file. Please try again.';
+        this.error = err || 'Failed to upload file. Please try again.';
       } finally {
         this.uploading = false;
       }
