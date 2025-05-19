@@ -20,7 +20,7 @@ conn = duckdb.connect(DUCKDB_FILE)
 conn.execute(f"""
 CREATE TABLE IF NOT EXISTS {DUCKDB_TABLE} (
     id INTEGER,
-    CHANNEL INTEGER,
+    CHANNEL TEXT,
     LOKASI TEXT,
     TANGGAL DATE,
     KODE_BARANG TEXT,
