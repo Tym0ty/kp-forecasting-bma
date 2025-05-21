@@ -104,6 +104,8 @@ def preprocess_uploaded_file(file_path: str) -> str:
         if col in df.columns:
             df = df.drop(columns=[col])
 
+    df['BERAT_TOTAL'] = df['BERAT_TOTAL'].astype(str).str.replace(',', '').astype(float)
+
     # Save to a new processed CSV file
     processed_path = file_path.rsplit('.', 1)[0] + "_processed.csv"
     df.to_csv(processed_path)
